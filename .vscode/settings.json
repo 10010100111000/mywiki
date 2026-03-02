@@ -1,0 +1,13 @@
+{
+    // 强制把图片存到 MkDocs 能读取的资源文件夹里
+    "pasteImage.path": "${projectRoot}/docs/assets/images",
+    
+    // 让 Markdown 里的引用路径自动计算，确保网页能找到图
+    "pasteImage.basePath": "${projectRoot}/docs",
+    
+    // 强制使用 Unix 斜杠 (GitHub 是 Linux 环境，必须用 / 不能用 \)
+    "pasteImage.forceUnixStyleSeparator": true,
+    
+    // 给图片加个前缀，方便以后管理
+    "pasteImage.prefix": "img-"
+}

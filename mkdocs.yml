@@ -1,0 +1,55 @@
+site_name: 我的 Web 安全实战笔记
+theme:
+  name: material
+  palette: 
+    scheme: default
+    primary: indigo  # 顶部栏颜色 (推荐 indigo, teal 或 white)
+    accent: indigo
+  features:
+    - navigation.expand       # 默认展开左侧菜单（不用点一下才开）
+    - navigation.sections     # 让一级目录变成粗体标题，而不是文件夹图标
+    - navigation.top          # 添加“返回顶部”按钮
+    - navigation.tracking     # 滚动页面时，侧边栏自动高亮当前章节
+    - content.code.copy       # 代码块复制按钮
+# 1. 引入自定义 CSS
+extra_css:
+  - stylesheets/extra.css
+
+# 2. 启用图标和高级 Markdown 语法
+markdown_extensions:
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+nav:
+  - 🏠 首页: index.md
+  - 🏗️ 基础基石 (Foundations):
+      - Linux 生存手册: 00-Foundations/Linux-Survival.md
+      - 网络基础: 00-Foundations/Networking-Basics.md
+      - HTTP 协议: 00-Foundations/HTTP-Protocol.md
+      - Python 脚本: 00-Foundations/Python-Scripts.md
+  - 🔍 信息收集 (Recon):
+      - 资产发现: 01-Reconnaissance/Asset-Discovery.md
+      - 端口扫描: 01-Reconnaissance/Port-Scanning.md
+      - Web 枚举: 01-Reconnaissance/Web-Enumeration.md
+  - ⚔️ 服务端攻击 (Server-Side):
+      - SQL 注入: 
+          - 原理与检测: 02-Server-Side-Attacks/SQL-Injection/Theory-and-Detection.md
+          - 手动注入: 02-Server-Side-Attacks/SQL-Injection/Manual-Exploitation.md
+          - SQLMap: 02-Server-Side-Attacks/SQL-Injection/Tools-SQLMap.md
+      - 文件操作 (LFI/Upload):
+          - 路径遍历: 02-Server-Side-Attacks/File-Operations/Path-Traversal.md
+          - 文件包含 (LFI): 02-Server-Side-Attacks/File-Operations/File-Inclusion.md
+          - 文件上传: 02-Server-Side-Attacks/File-Operations/File-Upload.md
+      - 命令注入 (RCE): 02-Server-Side-Attacks/Command-Injection/OS-Command-Injection.md
+      - 进阶漏洞 (SSRF/XXE): 02-Server-Side-Attacks/Advanced-Server/SSRF.md
+  - 🎭 客户端攻击 (Client-Side):
+      - XSS 跨站脚本: 03-Client-Side-Attacks/XSS-Cross-Site-Scripting.md
+      - CSRF: 03-Client-Side-Attacks/CSRF.md
+  - 🔓 认证与逻辑 (Logic):
+      - 越权访问 (IDOR): 04-Auth-and-Logic/IDOR-Access-Control.md
+      - 逻辑漏洞: 04-Auth-and-Logic/Logic-Flaws.md
+  - 🐚 Shell 管理:
+      - 反弹 Shell 大全: 05-Shell-and-Post/Reverse-Shells.md
+      - 文件传输技巧: 05-Shell-and-Post/File-Transfers.md
+  - 📖 速查表: 99-Cheatsheets/Wordlists.md

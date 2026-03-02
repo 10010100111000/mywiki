@@ -1,0 +1,80 @@
+/* docs/stylesheets/extra.css - 极简白风格 */
+
+/* 1. 网格布局保持不变 */
+.wiki-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 1.5em;
+}
+
+/* 2. 卡片样式 - 变成了白底灰边 */
+.wiki-card {
+    display: block;
+    background-color: #ffffff; /* 纯白背景 */
+    border: 1px solid #e0e0e0; /* 浅灰边框 */
+    border-radius: 8px;
+    padding: 24px;
+    text-decoration: none !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02); /* 非常淡的基础阴影 */
+}
+
+/* 3. 悬停效果 - 浮起并加深阴影 */
+.wiki-card:hover {
+    transform: translateY(-5px);
+    border-color: #3f51b5; /* 悬停时边框变蓝 (indigo) */
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1); /* 柔和的投影 */
+    background-color: #fafafa; /* 微妙的变灰 */
+}
+
+/* 4. 标题文字 - 深灰色 */
+.wiki-card h3 {
+    margin-top: 0 !important;
+    font-size: 1.1rem;
+    color: #333; /* 深灰，不是纯黑，不刺眼 */
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 5. 图标颜色 - 靛青色 */
+.wiki-card .icon {
+    color: #3f51b5; 
+    font-size: 1.5rem;
+}
+
+/* 6. 描述文字 - 中灰色 */
+.wiki-card p {
+    color: #666; 
+    font-size: 0.9rem;
+    margin-bottom: 0;
+    line-height: 1.6;
+}
+
+/* 7. 首页大标题区域 */
+.hero-section {
+    text-align: center;
+    padding: 40px 0;
+    border-bottom: 1px solid #eee; /* 浅灰分割线 */
+    margin-bottom: 40px;
+}
+.hero-section h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #2c3e50; /* 深蓝灰标题 */
+    letter-spacing: -1px;
+}
+.hero-section p {
+    color: #7f8c8d;
+}
+
+/* 8. 阶段标题装饰 (H2) */
+.phase-header {
+    border-left: 4px solid #3f51b5; /* 左侧竖线 */
+    padding-left: 15px;
+    color: #2c3e50; /* 标题颜色 */
+    margin-top: 3em !important;
+}
