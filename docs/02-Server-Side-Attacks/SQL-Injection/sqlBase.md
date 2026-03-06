@@ -430,7 +430,6 @@ Super_priv
 
 作用：超级管理员权限标志（Y 或 N），决定用户能否执行高级管理命令。
 
-
 ```sql
 mysql> select User,Host ,File_priv,Super_priv FROM mysql.user;
 +-----------------+----------+---------+--------------+
@@ -445,7 +444,6 @@ mysql> select User,Host ,File_priv,Super_priv FROM mysql.user;
 +-----------------+----------+---------+--------------+
 6 rows in set (0.03 sec)
 ```
-
 
 ## 动手实践
 
@@ -657,3 +655,89 @@ Empty set (0.00 sec)
 高扩展性与最终一致性： 通常采用分布式架构，极易进行横向扩展（增加服务器节点）。为了追求高可用性和分区容错性（CAP定理），通常牺牲强一致性，采用“最终一致性”模型 (BASE 原则)。定制化查询 API： 没有统一的 SQL 语法标准，每种 NoSQL 数据库都有自己的专属查询语言或 API（例如 MongoDB 使用 JSON 格式构造查询条件）。
 
 常见的数据库软件:MongoDB,Redis,Cassandra
+
+# 引入sql注入概念
+
+在后端服务器上安装并设置好 DBMS 后，Web 应用程序就可以开始使用它来存储和检索数据了。
+
+例如，在 PHP Web 应用程序中，我们可以连接到数据库，并在 PHP 中通过 MySQL 语法开始使用 MySQL 数据库，如下所示：
+
+```php
+$conn = new mysqli("localhost", "root", "password", "users");
+$query = "select * from logins";
+$result = $conn->query($query);
+```
+
+然后，查询的输出将存储在 $result 中，我们可以将其打印到页面上，或者以其他任何方式使用它。以下 PHP 代码将在新行中打印 SQL 查询的所有返回结果：
+
+```php
+while($row = $result->fetch_assoc() ){
+	echo $row["name"]."<br>";
+}
+```
+
+Web 应用程序在检索数据时通常也会使用用户输入。例如，当用户使用搜索功能搜索其他用户时，他们的搜索输入会被传递给 Web 应用程序，Web 应用程序会使用该输入在数据库中进行搜索：
+
+```php
+$searchInput =  $_POST['findUser'];
+$query = "select * from logins where username like '%$searchInput'";
+$result = $conn->query($query);
+```
+
+如果我们在一个SQL查询中使用用户输入，并且没有安全地编码，它可能会引起各种问题，比如SQL注入漏洞。
+
+在上面的例子中，我们接受用户输入并将其直接传递给 SQL 查询，而不进行清理。
+
+> 清理是指删除用户输入中的任何特殊字符，以阻止任何注入尝试。
+
+> 注入是指应用程序将用户输入误认为是实际代码而非字符串，从而更改代码流并执行代码。注入可以通过注入特殊字符（如 ( ' ））来转义用户输入边界，然后编写要执行的代码（例如 JavaScript 代码或 SQL 注入中的 SQL）来实现。除非用户输入经过安全处理，否则很有可能执行并运行注入的代码。
+
+当用户输入未经适当清理或过滤就被输入到 SQL 查询字符串中时，就会发生 SQL 注入。
+
+前面的示例展示了如何在 SQL 查询中使用用户输入，并且它没有使用任何形式的输入清理：
+
+> ```php
+> $searchInput =  $_POST['findUser'];
+> $query = "select * from logins where username like '%$searchInput'";
+> $result = $conn->query($query);
+> ```
+
+在典型场景下，用户会输入 *searchInput* 来完成查询操作，并返回预期的结果。我们输入的任何内容都会被代入到后续的 SQL 查询语句中：
+
+```sql
+select * from logins where username like '%$searchInput'
+```
+
+因此，如果我们输入 `admin `，它将变成 `'%admin' `。在这种情况下，如果我们编写任何 SQL 代码，它只会被视为搜索词。例如，如果我们输入 `SHOW DATABASES; `，它将被执行为 `'%SHOW DATABASES;' `Web 应用程序将搜索类似于 `SHOW DATABASES;` 的用户名。但是，由于没有进行任何清理，在这种情况下， 我们可以添加单引号 ( `'` )，它将结束用户输入字段，在它之后，我们可以编写实际的 SQL 代码 。例如，如果我们搜索 `1'; DROP TABLE users;` ，搜索输入将是：
+
+```sql
+'%1'; DROP TABLE users;'
+```
+
+> 请注意，我们在“1”后添加了一个单引号（'），以便逃避用户输入的界限（'%$searchInput'）。
+
+因此，最终执行的 SQL 查询如下：
+
+```sql
+select * from logins where username like '%1'; DROP TABLE users;'
+```
+
+从语法高亮中我们可以看出，我们可以避开原始查询的边界，并执行新注入的查询。一旦查询运行，用户表将被删除。
+
+> 为了简单起见，我们在分号 (;) 后添加了另一个 SQL 查询。虽然这在 MySQL 中实际上是不可能的，但在 MSSQL 和 PostgreSQL 中是可以的。在接下来的部分中，我们将讨论在 MySQL 中注入 SQL 查询的实际方法。
+
+前面的 SQL 注入示例将返回错误：
+
+```sql
+Error: near line 1: near "'": syntax error
+```
+
+这是因为最后一个字符，其中有一个未闭合的额外引号（ `' `），这会导致执行时出现 SQL 语法错误：
+
+```sql
+select * from logins where username like '%1'; DROP TABLE users;'
+```
+
+在这个案例中，由于我们从搜索查询中获取的输入内容恰好出现在 SQL 查询语句的末尾，因此只存在一个末尾字符。但在实际场景中，用户输入的内容通常会被嵌入到 SQL 查询语句的中间位置，而原始 SQL 查询语句的剩余部分则紧跟在用户输入内容之后。
+
+为了成功注入，我们必须确保新修改的 SQL 查询在注入后仍然有效，并且没有任何语法错误。大多数情况下，我们无法访问源代码来查找原始 SQL 查询，也无法开发合适的 SQL 注入来生成有效的 SQL 查询。那么，我们如何才能成功注入 SQL 查询呢？
