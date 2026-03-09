@@ -1743,6 +1743,7 @@ let clean = DOMPurify.sanitize( dirty );
 
 由于这些函数会将原始文本写入 HTML 代码，因此如果用户输入任何内容，都可能包含恶意 JavaScript 代码，从而导致 XSS 漏洞。
 
+
 ## 后端
 
 ### 输入验证
@@ -1824,6 +1825,9 @@ JavaScript 字符串上下文
 TODO
 
 https://portswigger.net/web-security/cross-site-scripting/preventing
+
+
+
 
 # 实战
 
