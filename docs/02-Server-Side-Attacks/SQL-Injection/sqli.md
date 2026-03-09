@@ -1132,8 +1132,83 @@ UNION(SELECT(1),2,3,'4
 
 假设有一个允许用户更新个人资料的 Web 应用程序。该应用程序会将用户输入的信息存储在数据库中。之后，当用户查看个人资料时，应用程序会检索这些数据并将其整合到 SQL 查询中，但并未进行适当的清理。攻击者可以利用这一点，在用户更新个人资料期间提交恶意代码，该代码会在用户查看个人资料时执行。
 
+## 案例1
 
+![1772988968505](images/sqli/1772988968505.png)
 
+当我门在标题和内容使用如图所示的内容时,提示我们
+
+> QLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'b', 'testuser', 'default_value', NOW())' at line 2
+
+![1772989137998](images/sqli/1772989137998.png)
+
+意识到可能的封闭后面有括号,试图用 `')-- -` 来尝试
+
+![1772989647856](images/sqli/1772989647856.png)
+
+提示插入值列表与列列表不匹配：1136 列数与值数在行 1 不匹配
+
+也就意味着这里使用了 `INSERT INTO 表名 (字段1,字段2) VALUES (值1,值2);` 来向数据库插入数据
+
+根据第一次报错猜测,值数应该不小于5个,类似
+
+```
+INSERT INTO 表名 (字段1,字段2...,标题字段,内容字段,用户名字段,默认字段,时间字段) VALUES (值1,值2...,标题,内容,用户名,default_velue,NOW());
+```
+
+当前我们不知道到底在标题字段中之前还有没有字段,假如构造如下的查询:
+
+![1772990374418](images/sqli/1772990374418.png)
+
+点击发布后,没有任何的错误,并且跳转到首页,我们能看到新发布的文章,我们点击文章后,可以看到
+
+![1772990428929](images/sqli/1772990428929.png)
+
+证实了当前我们猜测的没有错,接下来,我们可以使用子查询来获取数据库的内容了
+
+```sql
+1','2','3',(select group_concat(schema_name) from information_schema.schemata),NOW())-- -
+```
+
+![1772990844719](images/sqli/1772990844719.png)
+
+> 子查询记得包裹在()中
+
+## 案例2
+
+案例要求登录admin获得flag,页面提供了登陆和注册的功能
+
+![1772991837081](images/sqli/1772991837081.png)
+
+有了案例1的经历,马上尝试创建新的用户,也许那里就有注入点,当我们都提交'时
+
+![1772992247821](images/sqli/1772992247821.png)
+
+页面提示
+
+![1772992149590](images/sqli/1772992149590.png)
+
+经过尝试注册这里好像没有什么办法的情况下,我注册了用户,并登陆后如下:
+
+![1772993267977](images/sqli/1772993267977.png)
+
+提供了修改密码的功能,是否马上想到了`UPDATE 表名 SET 字段=值 WHERE 条件;`
+
+这条语句了,如果后端查询为:
+
+```
+UPDATE 表名 SET 字段='newpassword' WHERE username='当前用户名';
+```
+
+如果注册用户名为 `admin'-- -` ,当我们更新密码时,是不是能更新admin用户的密码呢,类似于:
+
+```sql
+UPDATE 表名 SET 字段='newpassword' WHERE username='admin'-- -;
+```
+
+![1772994023961](images/sqli/1772994023961.png)
+
+当修改密码后,重新登陆admin,使用我们新设置的密码,完成登陆
 
 
 
