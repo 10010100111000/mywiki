@@ -246,7 +246,7 @@ PHP 5.5 之前的版本存在 null byte injection 漏洞，这意味着在字符
 >
 > 练习： 尝试通过 LFI 读取任何 php 文件（例如 index.php），看看您是否会获得其源代码，或者文件是否会呈现为 HTML。
 
-#### 使用过滤器读取源码
+#### 使用warpper读取源码
 
 在后文中介绍
 
@@ -516,7 +516,7 @@ echo $output; // 输出当前运行 PHP 进程的用户
 
 由于其直接执行系统命令的高危特性，绝大多数生产环境严禁安装此扩展。在现代安全审计中，expect:// 属于“如果存在则一击必杀”，但“实际存在率极低”的漏洞点。
 
-# 使用过滤器读取源码
+# php://filter读取源码
 
 在前述章节中，若你尝试通过 LFI 包含任意 PHP 文件，会发现被包含的 PHP 文件会直接执行，最终渲染为普通 HTML 页面。例如，尝试包含 config.php 页面（Web 应用会自动追加 .php 扩展名）：
 
@@ -526,7 +526,7 @@ echo $output; // 输出当前运行 PHP 进程的用户
 
 这种行为在某些场景下有用（例如访问无直接访问权限的本地 PHP 页面，如 SSRF 场景），但多数情况下，我们更希望通过 LFI 读取 PHP 源码（源码往往包含应用的关键信息）。
 
-此时 base64 格式的 PHP 过滤器就可发挥作用：我们可通过它对 PHP 文件进行 Base64 编码，获取编码后的源码（而非执行并渲染文件）。该技巧对「自动追加 PHP 扩展名的 LFI 场景」尤为实用 —— 正如前文所述，这类场景通常仅允许包含 PHP 文件。
+此时 **base64 格式的 PHP 过滤器就可发挥作用：我们可通过它对 PHP 文件进行 Base64 编码，获取编码后的源码**（而非执行并渲染文件）。该技巧对「自动追加 PHP 扩展名的 LFI 场景」尤为实用 —— 正如前文所述，这类场景通常仅允许包含 PHP 文件。
 
 > [!NOTE]
 >
@@ -612,6 +612,11 @@ http://<SERVER_IP>:<PORT>/index.php?language=data://text/plain;base64,PD9waHAgc3
 $ curl -s 'http://<SERVER_IP>:<PORT>/index.php?language=data://text/plain;base64,PD9waHAgc3lzdGVtKCRfR0VUWyJjbWQiXSk7ID8%2BCg%3D%3D&cmd=id' | grep uid
             uid=33(www-data) gid=33(www-data) groups=33(www-data)
 ```
+
+> 也可以不要base64编码例如:
+>
+> data://text/plain,<?php echo 'hello'; ?>
+
 
 ## 使用 input  wrapper
 
@@ -909,6 +914,16 @@ http://<SERVER_IP>:<PORT>/index.php?language=phar://./profile_images/shell.jpg%2
 > [!NOTE]
 >
 > **注意：** 还有一种（已过时的）本地文件包含/上传攻击值得注意。当 PHP 配置中启用了文件上传功能，并且 `phpinfo()` 页面以某种方式暴露出来时，就会发生这种攻击。然而，这种攻击并不常见，因为它对触发条件有非常具体的要求（本地文件包含 + 已启用上传功能 + 旧版本 PHP + 暴露的 phpinfo() 页面）。如果您想了解更多信息，可以参考[此链接 ](https://book.hacktricks.xyz/pentesting-web/file-inclusion/lfi2rce-via-phpinfo)。
+
+## 练习
+
+尝试上传带shell的gif图片,发现后台处理了图片,无法访问到
+
+![1774114610776](images/fileInclusion/1774114610776.png)
+
+无法运行,虽然可以尝试像文件上传的部分那样尝试不同的后缀,但是还是尝试这里介绍的技术
+
+![1774115233714](images/fileInclusion/1774115233714.png)
 
 # 文件投毒与RCE
 
