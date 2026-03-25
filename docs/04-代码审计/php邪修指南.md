@@ -761,3 +761,460 @@ echo "通过";
   echo md5("admin"); // 输出：21232f297a57a5a743894a0e4a801fc3
   ?>
   ```
+
+# 8. 序列化和反序列化
+
+## 8.1 什么是序列化和反序列化?
+
+序列化：把 PHP 的变量（数组、对象等）打包成一个字符串（方便存储、传输）
+反序列化：把序列化后的字符串拆包还原成原来的 PHP 变量
+
+## 8.2 函数
+
+**serialize ()**：序列化（打包） 把序列化字符串还原成原来的变量 成功返回还原后的变量，失败返回 false
+
+* `$var`：必选，要序列化的变量
+* `$options`：可选，PHP 7.0+ 支持，比如 SERIALIZE_PREFER_IGNORE（忽略不可序列化的属性）
+
+  ```php
+  <?php
+  // 序列化数组
+  $arr = ["apple", "banana"];
+  echo serialize($arr);
+  // 输出：a:2:{i:0;s:5:"apple";i:1;s:6:"banana";}
+  ?>
+  ```
+
+**unserialize ()**：反序列化（拆包）
+
+* `$str`：必选，要反序列化的字符串
+* `$options`：可选，PHP 7.0+ 支持，比如 allowed_classes（允许反序列化的类，默认允许所有）
+
+```php
+<?php
+// 反序列化数组
+$str = 'a:2:{i:0;s:5:"apple";i:1;s:6:"banana";}';
+$arr = unserialize($str);
+print_r($arr);
+// 输出：Array ( [0] => apple [1] => banana )
+?>
+```
+
+## 8.3 序列化后的格式
+
+| 数据类型 | 格式                                                                     | 例子                                                                 |
+| -------- | ------------------------------------------------------------------------ | :------------------------------------------------------------------- |
+| 字符串   | `s:长度:"内容";`                                                       | `s:5:"apple";`（字符串 "apple"，长度 5）                           |
+| 整数     | `i:数字;`                                                              | `i:123;`（整数 123）                                               |
+| 索引数组 | `a:元素个数:{键1;值1;键2;值2;...}`                                     | `a:2:{i:0;s:3:"app";i:1;s:2:"ba";}`（2 个元素的数组）              |
+| 关联数组 | `a:元素个数:{键1;值1;键2;值2;...}`                                     | `a:2:{s:4:"name";s:2:"ad";s:4:"pass";s:4:"1234";}`2 个元素的数组） |
+| 对象     | `O:类名长度:"类名":属性个数:{属性名类型;属性名;属性值类型;属性值;...}` | 见下面例子                                                           |
+
+```php
+<?php
+// 定义一个类
+class User {
+    // 三种属性
+    public $name = "admin";      // public（公开）
+    private $pass = "123456";    // private（私有）
+    protected $email = "test@test.com"; // protected（保护）
+}
+
+// 序列化对象
+$user = new User();
+echo serialize($user);
+
+
+?>
+```
+
+输出为:
+
+```php
+O:4:"User":3:{
+    s:4:"name";s:5:"admin";
+    s:10:"\0User\0pass";s:6:"123456";
+    s:8:"\0*\0email";s:13:"test@test.com";
+}
+```
+
+| 属性类型                    | 序列化时的属性名格式                               | 长度计算规则                            |
+| --------------------------- | -------------------------------------------------- | --------------------------------------- |
+| **public（公开）**    | 直接写属性名：`s:长度:"属性名";`                 | 只算属性名本身的长度                    |
+| **private（私有）**   | 加 `\0类名\0` 前缀：`s:长度:"\0类名\0属性名";` | 1（\0）+ 类名长度 + 1（\0）+ 属性名长度 |
+| **protected（保护）** | 加 `\0*\0` 前缀：`s:长度:"\0*\0属性名";`       | 1（\0）+ 1（*）+ 1（\0）+ 属性名长度    |
+
+\0 是 NULL 字节，在 **URL 里传输时**必须编码成 %00，否则会失效！
+比如 private 属性的 \0User\0pass → URL 里写成 %00User%00pass
+
+## 8.4 魔术方法
+
+### __construct()
+
+构造函数（创建对象时自动触发）
+
+作用:当你**创建一个新对象**时，自动执行，用来**初始化对象**（比如给属性赋值）。
+
+触发时机:`$obj = new ClassName();` 时
+
+例子:
+
+```php
+<?php
+class User {
+    public $name;
+  
+    // 构造函数：创建对象时自动把名字设为 "admin"
+    public function __construct() {
+        $this->name = "admin";
+        echo "对象创建成功！<br>";
+    }
+}
+
+// 创建对象（自动触发 __construct()）
+$user = new User();
+echo $user->name; // 输出：对象创建成功！ admin
+?>
+```
+
+---
+
+### __destruct()
+
+析构函数（对象销毁时自动触发）
+
+作用:当对象**被销毁**时（比如代码执行完、手动删除对象），自动执行，用来**清理资源**（比如关闭文件、删除临时文件）。
+
+触发时机
+
+- 代码执行完，对象自动销毁时
+- 用 `unset($obj)` 手动删除对象时
+
+例子
+
+```php
+<?php
+class User {
+    public $name;
+  
+    // 构造函数：创建对象时自动执行
+    public function __construct() {
+        echo "对象创建了！<br>";
+    }
+  
+    // 析构函数：对象销毁时自动执行
+    public function __destruct() {
+        echo "对象销毁了！<br>";
+    }
+}
+
+// 1. 创建对象（自动触发 __construct()）
+$user = new User();
+echo "中间代码执行中...<br>";
+
+// 2. 代码执行完，对象自动销毁（自动触发 __destruct()）
+?>
+```
+
+输出结果
+
+```txt
+对象创建了！
+中间代码执行中...
+对象销毁了！
+```
+
+---
+
+### __sleep()
+
+序列化前自动触发
+
+作用:当你**调用 `serialize()` 序列化对象**前，自动执行，用来**选择要序列化的属性**（比如只序列化重要的属性，不序列化密码）。
+
+触发时机:`serialize($obj)` 时
+
+要求: 必须返回一个**数组**，包含要序列化的属性名
+
+例子:
+
+```php
+<?php
+class User {
+    public $name = "admin";
+    public $pass = "123456"; // 密码，不想序列化
+  
+    // 只序列化 $name，不序列化 $pass
+    public function __sleep() {
+        return ["name"]; // 返回要序列化的属性名数组
+    }
+}
+
+$user = new User();
+echo serialize($user);
+// 输出：O:4:"User":1:{s:4:"name";s:5:"admin";}（只有 $name，没有 $pass）
+?>
+```
+
+---
+
+### __wakeup()
+
+反序列化后自动触发
+
+作用:当你**调用 `unserialize()` 反序列化对象**后，自动执行，用来**重新初始化对象**（比如重新连接数据库）。
+
+触发时机:`unserialize($str)` 时
+
+例子:
+
+```php
+<?php
+class User {
+    public $name;
+  
+    // 反序列化后自动把名字改成 "admin"
+    public function __wakeup() {
+        $this->name = "admin";
+        echo "反序列化成功！<br>";
+    }
+}
+
+// 序列化字符串（原来的名字是 "test"）
+$str = 'O:4:"User":1:{s:4:"name";s:4:"test";}';
+
+// 反序列化（自动触发 __wakeup()）
+$user = unserialize($str);
+echo $user->name; // 输出：反序列化成功！ admin（名字被改成了 admin）
+?>
+```
+
+---
+
+### __toString()
+
+把对象当成字符串时自动触发
+
+作用: 当你**把对象当成字符串使用**时（比如 `echo $obj`），自动执行，用来**返回对象的字符串表示**。
+
+触发时机:`echo $obj`、`print $obj` 时
+
+要求:必须返回一个**字符串**
+
+例子
+
+```php
+<?php
+class User {
+    public $name = "admin";
+  
+    // 把对象当成字符串时，返回名字
+    public function __toString() {
+        return "用户名字：" . $this->name;
+    }
+}
+
+$user = new User();
+echo $user; // 输出：用户名字：admin（自动触发 __toString()）
+?>
+```
+
+# 8.5 反序列化漏洞基本原理
+
+核心逻辑
+
+如果：
+
+1. 开发者**把用户可控的变量传给 `unserialize()`**
+2. 且**类的魔术方法里有危险操作**（比如文件读写、命令执行）
+
+攻击者就可以**构造恶意序列化字符串**，触发魔术方法里的危险操作！
+
+### 漏洞例子
+
+```php
+<?php
+// 漏洞类：__destruct() 里有删除文件的危险操作
+class DeleteFile {
+    public $filename = "test.txt"; // 要删除的文件名
+  
+    // 析构函数：对象销毁时自动删除文件
+    public function __destruct() {
+        echo "正在删除文件：" . $this->filename . "<br>";
+        unlink($this->filename); // 删除文件（危险操作！）
+    }
+}
+
+// 漏洞代码：用户可控的 unserialize()
+$str = $_GET['str']; // 用户通过 URL 传参
+unserialize($str); // 反序列化用户传的字符串
+?>
+```
+
+攻击步骤
+
+步骤1：构造恶意序列化字符串
+
+我们写一段代码，把 `$filename` 改成要删除的文件（比如 `index.php`）：
+
+```php
+<?php
+class DeleteFile {
+    public $filename = "index.php"; // 改成要删除的文件
+}
+
+$obj = new DeleteFile();
+echo serialize($obj);
+// 输出：O:10:"DeleteFile":1:{s:8:"filename";s:9:"index.php";}
+?>
+```
+
+步骤2：访问漏洞 URL
+
+把构造好的序列化字符串通过 URL 传给漏洞代码：
+
+```
+你的网址?str=O:10:"DeleteFile":1:{s:8:"filename";s:9:"index.php";}
+```
+
+步骤3：自动触发漏洞
+
+1. `unserialize($str)` → 反序列化，创建 `DeleteFile` 对象
+2. 代码执行完 → 对象销毁，**自动触发 `__destruct()`**
+3. `__destruct()` 执行 → 删除 `index.php`
+
+### 实际挑战
+
+TODO
+
+# 9 json
+
+JSON 是一种文本格式，用来表示 对象（对象/字典）和数组 的数据结构。它源于 JavaScript，但已广泛应用于多种编程语言的数据交换。JSON 的结构简单、易读、易解析，常用于 Web API 数据传输、配置文件以及序列化数据存储。
+
+## 语法规则
+
+**JSON 顶层可以是任意 JSON 类型. 键值对之间用 `: `分割,不同的数据之间用逗号`,`分开**
+
+JSON 支持的基本类型包括 字符串（String）、数字（Number）、布尔值（Boolean）、数组（Array）、对象（Object）、空值（null）。字符串必须使用双引号 "。
+
+基本数据类型 (Simple Types)
+
+- **字符串 (String)**：必须使用**双引号**括起来的 Unicode 字符序列，支持反斜杠转义。
+- **数字 (Number)**：包括整数和浮点数（如 `42`, `3.14`, `1.0e+2`），不支持八进制和十六进制。
+- **布尔值 (Boolean)**：仅包含 `true` 或 `false` 两个字面值。
+- **空值 (Null)**：表示空或无值，写作 `null`。
+
+结构化数据类型 (Structured Types)
+
+- **对象 (Object)**：无序的“键/值对”集合，以 `{` 开始，以 `}` 结束。**键（Key）必须是双引号括起来的字符串**，值（Value）可以是任意合法的 JSON 类型。
+- **数组 (Array)**：值的有序集合，以 `[` 开始，以 `]` 结束。其中的元素可以是不同类型的 JSON 数据，甚至嵌套其他数组或对象。
+
+对象（Object）：由 {} 包含，内部包含一组键值对（key-value），键必须是字符串，值可以是字符串、数字、布尔值、数组、对象或 null。例如：
+
+```json
+{
+"name": "张三",
+"age": 28,
+"isStudent": false
+}
+```
+
+数组（Array）：由 [] 包含，内部是有序的值列表，每个值可以是任意 JSON 数据类型。例子：
+
+```json
+[
+"苹果",
+"香蕉",
+"橙子"
+]
+```
+
+# 10 json函数
+
+## json_encode()
+
+将 PHP 变量转换为 JSON 字符串,该函数用于将数组或对象编码成符合 JSON 格式的字符串。
+
+语法: `json_encode(mixed $value, int $flags = 0, int $depth = 512) `
+返回值: 格式化的json字符串 或false
+
+## json_decode()
+
+将 JSON 字符串转换为 PHP 变量,该函数用于解析 JSON 字符串，默认转换为 PHP 的 stdClass 对象。
+
+语法：`json_decode(string $json, ?bool $associative = null, int $depth = 512, int $flags = 0)`
+
+返回值: 成功时,根据传入的数据返回相应的数据类型的变量 ,失败返回null
+
+关键参数 (`$associative`)：
+设置为 true 时，JSON 对象将被转换为 关联数组 而非对象。
+通常在需要遍历数据或习惯数组操作时，建议设为 true。
+
+## 例子
+
+```php
+<?php
+// ======================
+// 一、json_encode：PHP变量 → JSON字符串
+// ======================
+
+// 1. 字符串
+$str = "CISP";
+json_encode($str);       // 结果："CISP"
+
+// 2. 数字
+$num = 666;
+json_encode($num);       // 结果：666
+
+// 3. 布尔值
+$bool = true;
+json_encode($bool);      // 结果：true
+
+// 4. 空值 null
+$null = null;
+json_encode($null);      // 结果：null
+
+// 5. 索引数组
+$arr = [10, 20, 30];
+json_encode($arr);
+// 格式化结果：
+// [
+//   10,
+//   20,
+//   30
+// ]
+
+// 6. 关联数组 (JSON对象)
+$user = ["name" => "admin", "age" => 18];
+json_encode($user);
+// 格式化结果：
+// {
+//   "name": "admin",
+//   "age": 18
+// }
+
+// ======================
+// 二、json_decode：JSON字符串 → PHP变量
+// ======================
+
+// 1. 解码字符串
+json_decode('"CISP"');   // 结果：string(4) "CISP"
+
+// 2. 解码数字
+json_decode('666');      // 结果：int(666)
+
+// 3. 解码布尔
+json_decode('true');     // 结果：bool(true)
+
+// 4. 解码 null
+json_decode('null');     // 结果：NULL
+
+// 5. 解码数组
+json_decode('[10,20,30]');
+// 结果：array(3) { [0]=> 10, [1]=> 20, [2]=> 30 }
+
+// 6. 解码对象 (加true转数组)
+json_decode('{"name":"admin","age":18}', true);
+// 结果：array(2) { ["name"]=> "admin", ["age"]=> 18 }
+?>
+```
