@@ -38,10 +38,8 @@ SELECT * from blog where id=2;--
 
 在简单场景下，预期查询与构造的新查询结果都会直接显示在前端，我们可以直接读取这些数据。这种方式被称为 `带内 SQL 注入（In-band SQL injection）`，它主要分为两种类型：`联合查询注入（Union Based）`和 `报错注入（Error Based）`。
 
-
 使用 `联合查询注入`时，我们需要指定要读取数据的确切位置（即列），让查询结果输出到该位置以便读取。而 `报错注入` 则适用于前端会显示 PHP 或 SQL 错误信息的场景，我们可以通过刻意触发 SQL 错误，让查询结果随错误信息一同返回。
 在更复杂的场景中，查询结果可能不会直接显示，这时我们可以利用 SQL 逻辑逐字符地获取数据。这种方式被称为 `盲注（Blind SQL injection）`，它也分为两种类型：`布尔盲注（Boolean Based）`和 `时间盲注（Time Based）`。
-
 
 `布尔盲注`通过 SQL 条件语句控制页面是否返回原始查询结果，以此判断条件是否成立。而 `时间盲注`则利用 Sleep() 等函数，让页面在条件成立时延迟响应，从而推断数据。
 最后，在某些极端情况下，我们可能完全无法直接获取输出，这时可以将查询结果导向一个远程位置（如 DNS 记录），再从该位置取回数据。这种方式被称为 `带外 SQL 注入（Out-of-band SQL injection）`。
@@ -402,7 +400,8 @@ SELECT * FROM art WHERE id=32' OR 1=1-- -
 ### updatexml()
 
 我们可以利用updatexml()函数,UPDATEXML() 本来是 MySQL 提供的一个用来修改 XML 文档的正常函数。
-它的标准语法是：UPDATEXML(XML文档, XPath路径, 替换成什么新内容),MySQL 规定，XPath路径这个参数必须是合法的 XPath 格式（比如 /root/user/name）。如果它不合法，MySQL 就会当场崩溃，并且为了方便开发者调试，它会把那个“不合法的字符串”原封不动地通过错误信息打印在屏幕上！
+它的标准语法是：`UPDATEXML(XML文档, XPath路径, 替换成什么新内容),`
+MySQL 规定，XPath路径这个参数必须是合法的 XPath 格式（比如 /root/user/name）。如果它不合法，MySQL 就会当场崩溃，并且为了方便开发者调试，它会把那个“不合法的字符串”原封不动地通过错误信息打印在屏幕上！
 
 ```sql
 AND UPDATEXML(1, CONCAT(CHAR(126), version(), CHAR(126)), 1)
@@ -670,7 +669,7 @@ xyz' AND SUBSTRING((SELECT Password FROM Users WHERE Username = 'Administrator')
 
 基于布尔值的 SQL 注入是指我们从注入尝试中收到的响应，这些响应可能是 true/false、yes/no、on/off、1/0 或任何只能有两种结果的响应。该结果确认我们的 SQL 注入有效载荷是否成功。乍一看，您可能会觉得这种有限的响应无法提供太多信息。然而，仅凭这两个响应，就有可能枚举整个数据库的结构和内容。
 
-### 案例2
+### 案例1
 
 ![1772725409508](images/sqli/1772725409508.png)
 
@@ -761,7 +760,7 @@ admin123' UNION SELECT 1,2,3 from users where username like 'a%
 >
 > UNION 把左右结果一合并：总结果就有了一行数据。
 
-### 案例3
+### 案例2
 
 有些应用程序会执行 SQL 查询，但无论查询是否返回数据，它们的行为都不会改变。上一节中提到的方法行不通，因为注入不同的布尔条件并不会改变应用程序的响应。
 
