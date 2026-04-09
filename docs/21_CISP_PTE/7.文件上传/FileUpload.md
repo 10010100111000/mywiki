@@ -105,3 +105,106 @@ active mq 的 put方法 可以任意文件上传漏洞
 5. l连接木马，![image-20260402164050473](./image/FileUpload/image-20260402164050473.png)
    ![image-20260402164110924](./image/FileUpload/image-20260402164110924.png)
 
+
+
+# 第四题
+
+![image-20260404234013661](./image/FileUpload/image-20260404234013661.png)
+
+
+
+## write up
+
+会检测文件末尾是否 以php结尾,检测魔法标记,和Content-Type
+
+最佳实践:
+
+1. 去除所有的php特征为图片的特征
+2. 大小写php
+3. 双写后缀
+4. 尝试除php以外的其他后缀
+5. 上下文检测时修改php代码中的函数
+6. 上传.htaccess文件
+
+这里尝试了使用大写PHP 就可以上传
+
+
+
+# 第五题 白名单绕过
+
+提示：只允许上传.jpg|.png|.gif类型文件！   
+
+## write up
+
+
+
+![image-20260404235228846](./image/FileUpload/image-20260404235228846.png)
+
+尝试双后缀绕过,如:![image-20260404235337717](./image/FileUpload/image-20260404235337717.png)
+
+可以看到并没有黑名单,但是会重命名文件,所有的路径截断都不好用了,htaccess 也会被该名字,不好使了
+
+只能测试他的白名单是否真的那么白了
+
+```txt
+.php
+.php2
+.php3
+.php4
+.php5
+.php6
+.php7
+.phtml
+.pht
+.phar
+.inc
+.shtml
+.htaccess
+```
+
+尝试这些都没有效果,
+
+但是他还有一个参数是可以被我们使用的,就是==save_path==  我们可以利用00截断 来操作,例如:
+
+![image-20260405002523475](./image/FileUpload/image-20260405002523475.png)
+
+在1. php后面有一个无法显示的字符,当后端拼接是,我们已经将内容写到了1.php中:
+
+![image-20260405002657556](./image/FileUpload/image-20260405002657556.png)
+
+也可以使用%0A %0D 等特殊的控制字符来截断
+
+后端代码如下:
+
+```php
+<?php
+
+$is_upload = false;
+$msg = null;
+if(isset($_POST['submit'])){
+    $ext_arr = array('jpg','png','gif');
+    $file_ext = strtolower(pathinfo($_FILES['upload_file']['name'], PATHINFO_EXTENSION));
+    
+    if(in_array($file_ext, $ext_arr)){
+        $temp_file = $_FILES['upload_file']['tmp_name'];
+        
+        // 读取文件内容，检查是否包含 eval 关键字
+        $file_content = file_get_contents($temp_file);
+        if (strpos($file_content, 'eval') !== false) {
+            $msg = "文件内容包含非法关键字！";
+        } else {
+            $img_path = $_POST['save_path'] . "/" . rand(10, 99) . date("YmdHis") . "." . $file_ext;
+
+            if(move_uploaded_file($temp_file, $img_path)){
+                $is_upload = true;
+            } else {
+                $msg = "上传失败";
+            }
+        }
+    } else {
+        $msg = "只允许上传.jpg|.png|.gif类型文件！";
+    }
+}
+?>
+```
+

